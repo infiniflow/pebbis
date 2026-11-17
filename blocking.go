@@ -143,7 +143,11 @@ func blockedPop(c *Ctx, args [][]byte, left bool) error {
 	v := c.Store.blockVersion()
 	for {
 		for _, k := range keys {
+			// The pop is a write: take the gate slot for just this call, so a
+			// transaction stage never absorbs it and the park below holds no lock.
+			release := c.writeSlot()
 			out, err := c.Store.listPop(c.DB, k, 1, left)
+			release()
 			if err != nil {
 				return err
 			}
@@ -215,12 +219,17 @@ func cmdBRPopLPush(c *Ctx, args [][]byte) error {
 
 	v := c.Store.blockVersion()
 	for {
+		release := c.writeSlot()
 		out, err := c.Store.listPop(c.DB, src, 1, false)
+		release()
 		if err != nil {
 			return err
 		}
 		if len(out) > 0 {
-			if _, err := c.Store.listPush(c.DB, dst, []string{out[0]}, true, false); err != nil {
+			release = c.writeSlot()
+			_, err := c.Store.listPush(c.DB, dst, []string{out[0]}, true, false)
+			release()
+			if err != nil {
 				return err
 			}
 			c.w.WriteBulkString(out[0])

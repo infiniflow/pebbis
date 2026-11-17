@@ -665,7 +665,11 @@ func bzPopCmd(c *Ctx, args [][]byte, max bool) error {
 	}
 	for {
 		bvkeysVersion1 := c.Store.blockVersion()
+		// BZPOPMIN/BZPOPMAX park between attempts, so the pop takes the write
+		// gate for its own duration only.
+		release := c.writeSlot()
 		key, items, err := zPopFromKeys(c, keys, 1, max)
+		release()
 		if err != nil {
 			return err
 		}
@@ -737,7 +741,9 @@ func cmdBZMPop(c *Ctx, args [][]byte) error {
 	}
 	for {
 		bvkeysVersion2 := c.Store.blockVersion()
+		release := c.writeSlot()
 		key, items, err := zPopFromKeys(c, keys, count, max)
+		release()
 		if err != nil {
 			return err
 		}

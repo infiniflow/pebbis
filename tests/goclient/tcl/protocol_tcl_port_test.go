@@ -7,22 +7,6 @@ import (
 	"testing"
 )
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 func Test_TCL_tcl_generic_wrong_number_of_args(t *testing.T) {
 	addr := startServer(t)
 	_ = addr
@@ -32,44 +16,3 @@ func Test_TCL_tcl_generic_wrong_number_of_args(t *testing.T) {
 	_ = resp
 	assertErrorPrefix(t, resp, "ERR")
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

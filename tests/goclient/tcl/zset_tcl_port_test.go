@@ -7,8 +7,6 @@ import (
 	"testing"
 )
 
-
-
 func Test_TCL_tcl_zadd_nan_rejected(t *testing.T) {
 	addr := startServer(t)
 	_ = addr
@@ -18,8 +16,6 @@ func Test_TCL_tcl_zadd_nan_rejected(t *testing.T) {
 	_ = r
 	assertErrorPrefix(t, r, "ERR")
 }
-
-
 
 func Test_TCL_tcl_zadd_xx_option(t *testing.T) {
 	addr := startServer(t)
@@ -157,8 +153,6 @@ func Test_TCL_tcl_zadd_incr_works_like_zincrby(t *testing.T) {
 	assertBulkEq(t, r, "25")
 }
 
-
-
 func Test_TCL_tcl_zadd_variadic_return_value(t *testing.T) {
 	addr := startServer(t)
 	_ = addr
@@ -223,10 +217,6 @@ func Test_TCL_tcl_zrem_variadic(t *testing.T) {
 	assertIntegerEq(t, r, 0)
 }
 
-
-
-
-
 func Test_TCL_tcl_zrank_zrevrank_basics(t *testing.T) {
 	addr := startServer(t)
 	_ = addr
@@ -268,12 +258,6 @@ func Test_TCL_tcl_zrank_after_deletion(t *testing.T) {
 	assertIntegerEq(t, r, 1)
 }
 
-
-
-
-
-
-
 func Test_TCL_tcl_zadd_incr_leading_to_nan_is_error(t *testing.T) {
 	addr := startServer(t)
 	_ = addr
@@ -285,39 +269,6 @@ func Test_TCL_tcl_zadd_incr_leading_to_nan_is_error(t *testing.T) {
 	_ = r
 	assertErrorPrefix(t, r, "ERR")
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 func Test_TCL_tcl_zpopmin_zpopmax_count_zero(t *testing.T) {
 	addr := startServer(t)
@@ -364,14 +315,6 @@ func Test_TCL_tcl_zpop_zmpop_against_wrong_type(t *testing.T) {
 	assertErrorPrefix(t, r, "WRONGTYPE")
 }
 
-
-
-
-
-
-
-
-
 func Test_TCL_tcl_zmscore_requires_one_or_more_members(t *testing.T) {
 	addr := startServer(t)
 	_ = addr
@@ -383,16 +326,6 @@ func Test_TCL_tcl_zmscore_requires_one_or_more_members(t *testing.T) {
 	_ = r
 	assertErrorPrefix(t, r, "ERR")
 }
-
-
-
-
-
-
-
-
-
-
 
 func Test_TCL_tcl_zrangestore_src_key_missing(t *testing.T) {
 	addr := startServer(t)
@@ -407,8 +340,6 @@ func Test_TCL_tcl_zrangestore_src_key_missing(t *testing.T) {
 	assertIntegerEq(t, r, 0)
 }
 
-
-
 func Test_TCL_tcl_zrangestore_empty_range(t *testing.T) {
 	addr := startServer(t)
 	_ = addr
@@ -422,10 +353,6 @@ func Test_TCL_tcl_zrangestore_empty_range(t *testing.T) {
 	r = cDo(t, client1, "EXISTS", "z2{t}")
 	assertIntegerEq(t, r, 0)
 }
-
-
-
-
 
 func Test_TCL_tcl_zrandmember_count_of_0(t *testing.T) {
 	addr := startServer(t)
@@ -469,8 +396,6 @@ func Test_TCL_tcl_zset_commands_dont_accept_empty_strings_as_valid_score(t *test
 	assertErrorPrefix(t, r, "ERR")
 }
 
-
-
 func Test_TCL_tcl_zstore_error_if_using_withscores(t *testing.T) {
 	addr := startServer(t)
 	_ = addr
@@ -487,12 +412,6 @@ func Test_TCL_tcl_zstore_error_if_using_withscores(t *testing.T) {
 	r = cDo(t, client1, "ZDIFFSTORE", "foo{t}", "2", "zsetd{t}", "zsetf{t}", "WITHSCORES")
 	assertErrorPrefix(t, r, "ERR")
 }
-
-
-
-
-
-
 
 func Test_TCL_tcl_zrangebylex_with_invalid_lex_range_specifiers(t *testing.T) {
 	addr := startServer(t)
@@ -512,28 +431,6 @@ func Test_TCL_tcl_zrangebylex_with_invalid_lex_range_specifiers(t *testing.T) {
 	assertErrorPrefix(t, r, "ERR")
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 func Test_TCL_tcl_bzmpop_illegal_argument_negative_numkeys(t *testing.T) {
 	addr := startServer(t)
 	_ = addr
@@ -543,43 +440,3 @@ func Test_TCL_tcl_bzmpop_illegal_argument_negative_numkeys(t *testing.T) {
 	_ = r
 	assertErrorPrefix(t, r, "ERR")
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

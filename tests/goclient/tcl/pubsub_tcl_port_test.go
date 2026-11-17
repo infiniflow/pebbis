@@ -5,6 +5,7 @@ package tcl
 import (
 	"testing"
 )
+
 func Test_TCL_tcl_pubsub_ping_resp2(t *testing.T) {
 	t.Skip("TODO: only 18 of its statements could be ported")
 }
@@ -50,7 +51,9 @@ func Test_TCL_tcl_numsub_returns_numbers_not_strings(t *testing.T) {
 	client1 := connectConn(t, addr)
 	resp := cDoConn(t, client1, "PUBSUB", "NUMSUB", "abc", "def")
 	items := unwrapArray(t, resp)
-	if len(items) != 4 { t.Fatalf("len mismatch: got %d want 4", len(items)) }
+	if len(items) != 4 {
+		t.Fatalf("len mismatch: got %d want 4", len(items))
+	}
 	assertBulkEq(t, items[0], "abc")
 	// PORT-TODO: assert_eq!(unwrap_integer(&items[1]), 0);
 	assertBulkEq(t, items[2], "def")

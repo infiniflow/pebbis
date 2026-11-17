@@ -6,9 +6,10 @@ import (
 
 // Pub/Sub commands.
 //
-// The subscription registry is redcon's: it already handles the fiddly part,
-// which is detaching the connection from the command loop and serving it from a
-// dedicated goroutine once a client is in subscriber mode.
+// The subscription registry is our own (pubsub_hub.go): redcon detaches the
+// connection from the command loop and serves it from a dedicated goroutine once
+// a client is in subscriber mode, but it keeps its subscriber table private, so
+// PUBSUB CHANNELS / NUMSUB / NUMPAT need the bookkeeping in the hub.
 
 func cmdSubscribe(c *Ctx, args [][]byte) error  { return subscribeCmd(c, args, false) }
 func cmdPSubscribe(c *Ctx, args [][]byte) error { return subscribeCmd(c, args, true) }
@@ -40,8 +41,10 @@ func unsubscribeCmd(c *Ctx, args [][]byte, pattern bool) error {
 	if pattern {
 		kind = "punsubscribe"
 	}
+	// Reaching this path means the connection is not in subscriber mode (a
+	// subscribed client is detached and served by the hub), so there is nothing
+	// to unregister and the remaining count is zero.
 	for _, a := range args {
-		c.Server().unsubscribeCount(string(a), pattern)
 		c.w.WriteArray(3)
 		c.w.WriteBulkString(kind)
 		c.w.WriteBulkString(string(a))
@@ -65,7 +68,7 @@ func cmdPublish(c *Ctx, args [][]byte) error {
 		c.writeInt(0)
 		return nil
 	}
-	c.writeInt(int64(srv.ps.Publish(string(args[0]), string(args[1]))))
+	c.writeInt(int64(srv.hub.publish(string(args[0]), string(args[1]))))
 	return nil
 }
 
@@ -86,14 +89,14 @@ func cmdPubSub(c *Ctx, args [][]byte) error {
 		if len(args) > 1 {
 			pattern = string(args[1])
 		}
-		names := srv.channelNames(pattern)
+		names := srv.hub.channelNames(pattern)
 		c.w.WriteArray(len(names))
 		for _, n := range names {
 			c.w.WriteBulkString(n)
 		}
 		return nil
 	case "NUMSUB":
-		counts := srv.channelCounts(byteSliceToStrings(args[1:]))
+		counts := srv.hub.channelCounts(byteSliceToStrings(args[1:]))
 		c.w.WriteArray(len(counts) * 2)
 		for _, cc := range counts {
 			c.w.WriteBulkString(cc.name)
@@ -101,7 +104,7 @@ func cmdPubSub(c *Ctx, args [][]byte) error {
 		}
 		return nil
 	case "NUMPAT":
-		c.writeInt(int64(srv.patternCount()))
+		c.writeInt(int64(srv.hub.patternCount()))
 		return nil
 	default:
 		return ErrSyntax

@@ -45,6 +45,10 @@ func cmdInfo(c *Ctx, args [][]byte) error {
 		fmt.Fprintf(&b, "maxmemory_human:%s\r\n", humanBytes(s.cfg.Load().MaxMemory))
 		fmt.Fprintf(&b, "maxmemory_policy:%s\r\n", s.cfg.Load().EvictionPolicy)
 		fmt.Fprintf(&b, "block_cache_memory:%d\r\n", s.BlockCacheMemory())
+		// used_memory counts the index only (as in Redis); used_memory_total is
+		// what maxmemory is enforced against once the budget is large enough to
+		// include the engine's block cache and memtables.
+		fmt.Fprintf(&b, "used_memory_total:%d\r\n", s.TotalMemory())
 		b.WriteString("\r\n")
 	}
 	if section == "default" || section == "all" || section == "persistence" {

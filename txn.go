@@ -1,6 +1,9 @@
 package pebbis
 
 import (
+	"log"
+	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/tidwall/redcon"
@@ -174,10 +177,35 @@ func cmdExec(c *Ctx, args [][]byte) error {
 		return &protoError{"ERR EXEC without MULTI"}
 	}
 
+	// Lock every key the transaction will touch, plus the watched ones, for the
+	// whole EXEC. This is what makes the queued commands indivisible: another
+	// client's command on one of those keys now blocks until the transaction
+	// has finished, instead of slipping in between two queued commands. The
+	// locks are taken in a canonical order (ascending database, then the shard
+	// order LockKeys already uses), so two transactions can never deadlock.
+	queue := cs.queue
+	unlockTxn := c.Store.lockTxnKeys(c.DB, queue, cs.watched)
+	defer unlockTxn()
+
+	// Stage the transaction's storage writes: every Put/Delete/Merge/Apply while
+	// the stage is open lands in one Pebble batch, so a crash either applies the
+	// whole transaction or none of it. The exclusive side of the write gate
+	// keeps single writes (and the background expires/eviction passes) out while
+	// the stage is open, which is what makes the staging safe to be global.
+	staged := transactionHasWrites(queue)
+	if staged {
+		c.Store.writeGate.Lock()
+		defer c.Store.writeGate.Unlock()
+		c.Store.eng.BeginStage()
+		// No-op once CommitStage has taken the buffer.
+		defer c.Store.eng.AbortStage()
+	}
+
 	// Optimistic concurrency check, expiry-aware: a watched key that expired
 	// after WATCH counts as modified, while a key that was already stale
 	// (logically expired) at WATCH time is treated as non-existent, so its
-	// removal does not abort the transaction.
+	// removal does not abort the transaction. It runs under the lock taken
+	// above, so nothing can change between the check and the writes.
 	if len(cs.watched) > 0 {
 		now := c.Store.clock.NowMilli()
 		abort := false
@@ -216,7 +244,6 @@ func cmdExec(c *Ctx, args [][]byte) error {
 		return &protoError{"EXECABORT Transaction discarded because of previous errors."}
 	}
 
-	queue := cs.queue
 	cs.inTxn = false
 	cs.queue = nil
 	cs.watched = nil
@@ -267,7 +294,115 @@ func cmdExec(c *Ctx, args [][]byte) error {
 	// dispatch loop mirrors c.DB back into the connection state.
 	c.DB = curDB
 	cs.db = curDB
+
+	// Commit the staged writes as one atomic Pebble batch. The replies are
+	// already buffered on the connection, so a commit failure cannot be reported
+	// as a protocol error without corrupting the stream: log it and drop the
+	// connection instead.
+	if staged {
+		if err := c.Store.eng.CommitStage(); err != nil {
+			log.Printf("pebbis: EXEC commit failed, closing connection: %v", err)
+			if c.conn != nil {
+				_ = c.conn.Close()
+			}
+			return nil
+		}
+	}
 	return nil
+}
+
+// transactionHasWrites reports whether any queued command writes. A read-only
+// transaction needs neither the write gate nor a staging batch.
+func transactionHasWrites(queue [][]string) bool {
+	for _, line := range queue {
+		if len(line) == 0 {
+			continue
+		}
+		if cm, ok := lookupCommand(strings.ToUpper(line[0])); ok && cm.write {
+			return true
+		}
+	}
+	return false
+}
+
+// txnKeyGroup is one database's worth of keys touched by a transaction.
+type txnKeyGroup struct {
+	db   uint16
+	keys []string
+}
+
+// lockTxnKeys takes the exclusive per-key lock on everything the transaction
+// touches and returns the release function. Databases are locked in ascending
+// order and each database's shards in LockKeys' canonical order, so the lock
+// acquisition order is identical for every transaction and cannot deadlock.
+func (s *Store) lockTxnKeys(startDB uint16, queue [][]string, watched map[string]uint64) func() {
+	groups := transactionKeys(startDB, queue, watched)
+	unlocks := make([]func(), 0, len(groups))
+	for _, g := range groups {
+		unlocks = append(unlocks, s.LockKeys(g.db, g.keys, true))
+	}
+	return func() {
+		for i := len(unlocks) - 1; i >= 0; i-- {
+			unlocks[i]()
+		}
+	}
+}
+
+// transactionKeys walks the queued commands the way EXEC will run them, tracking
+// SELECT so every key is attributed to the database it will be written in, and
+// returns the keys grouped by database in ascending order.
+func transactionKeys(startDB uint16, queue [][]string, watched map[string]uint64) []txnKeyGroup {
+	db := startDB
+	byDB := make(map[uint16][]string)
+	seen := make(map[uint16]map[string]struct{})
+	add := func(d uint16, key string) {
+		m, ok := seen[d]
+		if !ok {
+			m = make(map[string]struct{})
+			seen[d] = m
+		}
+		if _, dup := m[key]; dup {
+			return
+		}
+		m[key] = struct{}{}
+		byDB[d] = append(byDB[d], key)
+	}
+
+	for _, line := range queue {
+		if len(line) == 0 {
+			continue
+		}
+		upper := strings.ToUpper(line[0])
+		args := make([][]byte, 0, len(line)-1)
+		for _, a := range line[1:] {
+			args = append(args, []byte(a))
+		}
+		if upper == "SELECT" && len(args) == 1 {
+			if idx, err := strconv.ParseInt(string(args[0]), 10, 64); err == nil && idx >= 0 && idx <= 0xffff {
+				db = uint16(idx)
+			}
+			continue
+		}
+		for _, k := range commandKeys(upper, args) {
+			add(db, k)
+		}
+	}
+	// A transaction aborts when a watched key changed, so the watched keys must
+	// be locked too: otherwise the version could move right after the check.
+	for k := range watched {
+		add(startDB, k)
+	}
+
+	dbs := make([]int, 0, len(byDB))
+	for d := range byDB {
+		dbs = append(dbs, int(d))
+	}
+	sort.Ints(dbs)
+	out := make([]txnKeyGroup, 0, len(dbs))
+	for _, d := range dbs {
+		out = append(out, txnKeyGroup{db: uint16(d), keys: byDB[uint16(d)]})
+	}
+	return out
 }
 
 // compile-time check that the transaction path stays compatible with redcon's

@@ -1,9 +1,11 @@
 package storage
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"runtime"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/pebble"
@@ -26,11 +28,24 @@ type Engine struct {
 	cache    *pebble.Cache
 	writeOpt *pebble.WriteOptions
 	inMemory bool
+	// staged, when non-nil, is an indexed batch that absorbs every write and is
+	// the first place reads look. It is what makes MULTI/EXEC crash-atomic: all
+	// of a transaction's writes land in one Pebble batch, so a crash either
+	// applies the whole transaction or none of it. Only one stage may be open at
+	// a time; the store serialises the writers that would otherwise share it.
+	staged atomic.Pointer[pebble.Batch]
+	// merger is the counter merge operator, kept so a staged Merge can be folded
+	// by hand (an indexed batch does not fold operands on read).
+	merger *pebble.Merger
 }
 
 // Open creates or reopens a Pebble store described by cfg.
 // An empty cfg.Dir yields a memory-backed store.
 func Open(cfg *config.Config) (*Engine, error) {
+	merger := &pebble.Merger{
+		Merge: counterMerge{}.Merge,
+		Name:  "pebbis.counter",
+	}
 	opts := &pebble.Options{
 		Cache:                       pebble.NewCache(cfg.BlockCacheSize),
 		MemTableSize:                cfg.MemTableSize,
@@ -42,10 +57,7 @@ func Open(cfg *config.Config) (*Engine, error) {
 		// The commutative counter class (INCR/DECR/INCRBY/DECRBY/INCRBYFLOAT)
 		// sinks its read-modify-write into Pebble's merge operator, so increments
 		// on the same key never serialise on a mutex. See storage/merge.go.
-		Merger: &pebble.Merger{
-			Merge: counterMerge{}.Merge,
-			Name:  "pebbis.counter",
-		},
+		Merger: merger,
 	}
 
 	inMemory := cfg.Dir == ""
@@ -84,6 +96,7 @@ func Open(cfg *config.Config) (*Engine, error) {
 		cache:    opts.Cache,
 		writeOpt: wo,
 		inMemory: inMemory,
+		merger:   merger,
 	}, nil
 }
 
@@ -106,6 +119,15 @@ func levelOptions() []pebble.LevelOptions {
 // Get returns the value stored at key. The returned slice is only valid until
 // release is called; callers that need to keep it must copy.
 func (e *Engine) Get(key []byte) (value []byte, release func(), err error) {
+	if st := e.staged.Load(); st != nil {
+		// An indexed batch reads through to the DB for keys it does not hold,
+		// so staged writes and the committed state are one view.
+		v, closer, err := st.Get(key)
+		if err != nil {
+			return nil, nil, err
+		}
+		return v, func() { _ = closer.Close() }, nil
+	}
 	v, closer, err := e.db.Get(key)
 	if err != nil {
 		return nil, nil, err
@@ -115,23 +137,64 @@ func (e *Engine) Get(key []byte) (value []byte, release func(), err error) {
 
 // GetCopy returns a heap copy of the value stored at key.
 func (e *Engine) GetCopy(key []byte) ([]byte, error) {
-	v, closer, err := e.db.Get(key)
+	v, release, err := e.Get(key)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = closer.Close() }()
+	defer release()
 	out := make([]byte, len(v))
 	copy(out, v)
 	return out, nil
 }
 
+// BeginStage opens a write transaction: from here until CommitStage or
+// AbortStage, every write on this Engine is buffered instead of applied, reads
+// see the buffered writes, and nothing reaches Pebble until CommitStage applies
+// the whole buffer in one atomic batch.
+//
+// Callers must guarantee exclusivity: no other goroutine may write while a stage
+// is open (the store holds its write gate for this).
+func (e *Engine) BeginStage() {
+	e.staged.Store(e.db.NewIndexedBatch())
+}
+
+// CommitStage applies the buffered writes as a single Pebble batch. A crash
+// before this call leaves no trace of the transaction; after it, all of it.
+func (e *Engine) CommitStage() error {
+	st := e.staged.Swap(nil)
+	if st == nil {
+		return nil
+	}
+	defer func() { _ = st.Close() }()
+	if st.Empty() {
+		return nil
+	}
+	return e.db.Apply(st, e.writeOpt)
+}
+
+// AbortStage throws the buffered writes away.
+func (e *Engine) AbortStage() {
+	if st := e.staged.Swap(nil); st != nil {
+		_ = st.Close()
+	}
+}
+
+// Staged reports whether a write transaction is open.
+func (e *Engine) Staged() bool { return e.staged.Load() != nil }
+
 // Put writes a single key.
 func (e *Engine) Put(key, value []byte) error {
+	if st := e.staged.Load(); st != nil {
+		return st.Set(key, value, nil)
+	}
 	return e.db.Set(key, value, e.writeOpt)
 }
 
 // Delete removes a single key.
 func (e *Engine) Delete(key []byte) error {
+	if st := e.staged.Load(); st != nil {
+		return st.Delete(key, nil)
+	}
 	return e.db.Delete(key, e.writeOpt)
 }
 
@@ -140,8 +203,12 @@ func (e *Engine) Batch() *Batch {
 	return &Batch{b: e.db.NewBatch()}
 }
 
-// Apply commits a batch atomically.
+// Apply commits a batch atomically. Inside a stage the batch is merged into the
+// open transaction instead, so its writes commit (or vanish) with it.
 func (e *Engine) Apply(b *Batch) error {
+	if st := e.staged.Load(); st != nil {
+		return st.Apply(b.b, nil)
+	}
 	return e.db.Apply(b.b, e.writeOpt)
 }
 
@@ -149,11 +216,46 @@ func (e *Engine) Apply(b *Batch) error {
 // increments on a key are resolved associatively by the merge operator instead of
 // serialising on a per-key lock. See storage/merge.go.
 func (e *Engine) Merge(key, value []byte) error {
-	return e.db.Merge(key, value, e.writeOpt)
+	st := e.staged.Load()
+	if st == nil {
+		return e.db.Merge(key, value, e.writeOpt)
+	}
+	// An indexed batch does not fold merge operands when reading, so fold here
+	// and stage a plain Set: whatever the transaction reads back is the folded
+	// value, exactly what the committed state will produce.
+	var base []byte
+	v, closer, err := st.Get(key)
+	switch {
+	case err == nil:
+		base = append([]byte(nil), v...)
+		_ = closer.Close()
+	case err == pebble.ErrNotFound:
+		base = nil
+	default:
+		return err
+	}
+	vm, err := e.merger.Merge(key, base)
+	if err != nil {
+		return err
+	}
+	if err := vm.MergeNewer(value); err != nil {
+		return err
+	}
+	merged, mcloser, err := vm.Finish(true)
+	if mcloser != nil {
+		_ = mcloser.Close()
+	}
+	if err != nil {
+		return err
+	}
+	return st.Set(key, merged, nil)
 }
 
 // DeleteRange removes every key in [start, end).
 func (e *Engine) DeleteRange(start, end []byte) error {
+	if st := e.staged.Load(); st != nil {
+		return st.DeleteRange(start, end, nil)
+	}
 	return e.db.DeleteRange(start, end, e.writeOpt)
 }
 
@@ -165,18 +267,81 @@ func (e *Engine) Scan(prefix []byte, fn func(key, value []byte) error) error {
 
 // ScanRange visits every key/value in [start, end).
 func (e *Engine) ScanRange(start, end []byte, fn func(key, value []byte) error) error {
-	iter, err := e.db.NewIter(&pebble.IterOptions{LowerBound: start, UpperBound: end})
+	return e.scanRange(start, end, fn)
+}
+
+// scanRange is the merged view of the DB and the open stage. While a
+// transaction is staging writes, a plain DB iterator would miss them (and would
+// still show keys the transaction deleted), so the two sides are merged in key
+// order and every key is resolved through the batch, which applies deletes and
+// merge operands consistently.
+func (e *Engine) scanRange(start, end []byte, fn func(key, value []byte) error) error {
+	opts := &pebble.IterOptions{LowerBound: start, UpperBound: end}
+	dbIter, err := e.db.NewIter(opts)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = iter.Close() }()
+	defer func() { _ = dbIter.Close() }()
 
-	for valid := iter.First(); valid; valid = iter.Next() {
-		if err := fn(iter.Key(), iter.Value()); err != nil {
+	st := e.staged.Load()
+	if st == nil {
+		for valid := dbIter.First(); valid; valid = dbIter.Next() {
+			if err := fn(dbIter.Key(), dbIter.Value()); err != nil {
+				return err
+			}
+		}
+		return dbIter.Error()
+	}
+
+	bIter, err := st.NewIter(opts)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = bIter.Close() }()
+
+	// emit resolves key through the stage: a staged delete hides it, a staged
+	// merge operand is folded in, and a staged write is returned as-is.
+	emit := func(key []byte) error {
+		v, closer, err := st.Get(key)
+		if err == pebble.ErrNotFound {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		defer func() { _ = closer.Close() }()
+		return fn(key, v)
+	}
+
+	bValid := bIter.First()
+	for dValid := dbIter.First(); dValid; dValid = dbIter.Next() {
+		dk := dbIter.Key()
+		for bValid && bytes.Compare(bIter.Key(), dk) < 0 {
+			if err := emit(bIter.Key()); err != nil {
+				return err
+			}
+			bValid = bIter.Next()
+		}
+		if bValid && bytes.Equal(bIter.Key(), dk) {
+			if err := emit(dk); err != nil {
+				return err
+			}
+			bValid = bIter.Next()
+			continue
+		}
+		if err := emit(dk); err != nil {
 			return err
 		}
 	}
-	return iter.Error()
+	for ; bValid; bValid = bIter.Next() {
+		if err := emit(bIter.Key()); err != nil {
+			return err
+		}
+	}
+	if err := dbIter.Error(); err != nil {
+		return err
+	}
+	return bIter.Error()
 }
 
 // LastInRange returns the greatest key/value in [start, end] (both inclusive)
@@ -184,37 +349,92 @@ func (e *Engine) ScanRange(start, end []byte, fn func(key, value []byte) error) 
 // of a scan of the whole stream: "the newest entry" is one SeekLT away.
 // The returned key and value are copies; release is nil-safe.
 func (e *Engine) LastInRange(start, end []byte) (key, value []byte, found bool, err error) {
-	iter, err := e.db.NewIter(&pebble.IterOptions{LowerBound: start, UpperBound: prefixEnd(end)})
+	st := e.staged.Load()
+	if st == nil {
+		iter, err := e.db.NewIter(&pebble.IterOptions{LowerBound: start, UpperBound: prefixEnd(end)})
+		if err != nil {
+			return nil, nil, false, err
+		}
+		defer func() { _ = iter.Close() }()
+
+		if valid := iter.Last(); valid {
+			key = append([]byte(nil), iter.Key()...)
+			value = append([]byte(nil), iter.Value()...)
+			found = true
+		}
+		return key, value, found, iter.Error()
+	}
+
+	// Staged: start from the greatest key either side holds and walk down while
+	// the transaction deleted it. Normally this is one step.
+	opts := &pebble.IterOptions{LowerBound: start, UpperBound: prefixEnd(end)}
+	dbIter, err := e.db.NewIter(opts)
 	if err != nil {
 		return nil, nil, false, err
 	}
-	defer func() { _ = iter.Close() }()
-
-	if valid := iter.Last(); valid {
-		key = append([]byte(nil), iter.Key()...)
-		value = append([]byte(nil), iter.Value()...)
-		found = true
+	defer func() { _ = dbIter.Close() }()
+	bIter, err := st.NewIter(opts)
+	if err != nil {
+		return nil, nil, false, err
 	}
-	return key, value, found, iter.Error()
+	defer func() { _ = bIter.Close() }()
+
+	var cur []byte
+	if dbIter.Last() {
+		cur = append([]byte(nil), dbIter.Key()...)
+	}
+	if bIter.Last() {
+		if bk := bIter.Key(); cur == nil || bytes.Compare(bk, cur) > 0 {
+			cur = append([]byte(nil), bk...)
+		}
+	}
+	for cur != nil {
+		v, closer, gerr := st.Get(cur)
+		if gerr == nil {
+			out := append([]byte(nil), v...)
+			_ = closer.Close()
+			return cur, out, true, nil
+		}
+		if gerr != pebble.ErrNotFound {
+			return nil, nil, false, gerr
+		}
+		// Deleted by the transaction: step to the next smaller key.
+		var next []byte
+		if dbIter.SeekLT(cur) {
+			next = append([]byte(nil), dbIter.Key()...)
+		}
+		if bIter.SeekLT(cur) {
+			if bk := bIter.Key(); next == nil || bytes.Compare(bk, next) > 0 {
+				next = append([]byte(nil), bk...)
+			}
+		}
+		cur = next
+	}
+	return nil, nil, false, nil
 }
 
 // ScanKeys visits only the keys under prefix, avoiding value materialisation.
 func (e *Engine) ScanKeys(prefix []byte, fn func(key []byte) error) error {
-	iter, err := e.db.NewIter(&pebble.IterOptions{
-		LowerBound: prefix,
-		UpperBound: prefixEnd(prefix),
-	})
-	if err != nil {
-		return err
-	}
-	defer func() { _ = iter.Close() }()
-
-	for valid := iter.First(); valid; valid = iter.Next() {
-		if err := fn(iter.Key()); err != nil {
+	if e.staged.Load() == nil {
+		iter, err := e.db.NewIter(&pebble.IterOptions{
+			LowerBound: prefix,
+			UpperBound: prefixEnd(prefix),
+		})
+		if err != nil {
 			return err
 		}
+		defer func() { _ = iter.Close() }()
+
+		for valid := iter.First(); valid; valid = iter.Next() {
+			if err := fn(iter.Key()); err != nil {
+				return err
+			}
+		}
+		return iter.Error()
 	}
-	return iter.Error()
+	return e.scanRange(prefix, prefixEnd(prefix), func(key, _ []byte) error {
+		return fn(key)
+	})
 }
 
 // ScanKeysFrom is like ScanKeys but resumes strictly after startKey, so a
@@ -224,6 +444,14 @@ func (e *Engine) ScanKeys(prefix []byte, fn func(key []byte) error) error {
 // seeks to the first key greater than it. This terminates even while the
 // keyspace grows, because iteration always advances to the lexicographic end.
 func (e *Engine) ScanKeysFrom(prefix, startKey []byte, fn func(key []byte) error) error {
+	if e.staged.Load() != nil {
+		return e.scanRange(prefix, prefixEnd(prefix), func(key, _ []byte) error {
+			if len(startKey) > 0 && bytes.Compare(key, startKey) <= 0 {
+				return nil
+			}
+			return fn(key)
+		})
+	}
 	iter, err := e.db.NewIter(&pebble.IterOptions{
 		LowerBound: prefix,
 		UpperBound: prefixEnd(prefix),
@@ -274,6 +502,13 @@ func (e *Engine) BlockCacheBytes() int64 {
 		return 0
 	}
 	return e.cache.Size()
+}
+
+// MemTableBytes returns the bytes currently held by the memtables. It walks
+// Pebble's metrics, so it is meant for a periodic sampler, not the write path.
+func (e *Engine) MemTableBytes() int64 {
+	m := e.db.Metrics()
+	return int64(m.MemTable.Size)
 }
 
 // DiskUsageBytes returns an estimate of the on-disk footprint.

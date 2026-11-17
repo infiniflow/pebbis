@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"testing"
 )
+
 func Test_TCL_tcl_sort_get_hash_returns_elements_sorted(t *testing.T) {
 	t.Skip("TODO: converter: cannot express Rust to_string()")
 }
@@ -119,7 +120,7 @@ func Test_TCL_tcl_sort_regression_issue_19_sorting_floats(t *testing.T) {
 	floats := []string{"1.1", "5.10", "3.10", "7.44", "2.1", "5.75", "6.12", "0.25", "1.15"}
 	for _, x := range floats {
 		_ = x
-	cDoConn(t, client1, "LPUSH", "mylist", x)
+		cDoConn(t, client1, "LPUSH", "mylist", x)
 	}
 	resp := cDoConn(t, client1, "SORT", "mylist")
 	items := extractBulkStrings(t, resp)
@@ -176,7 +177,7 @@ func Test_TCL_tcl_sort_by_constant_store_orders_output(t *testing.T) {
 	members := []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "z", "aa", "aaa", "azz"}
 	for _, m := range members {
 		_ = m
-	cDoConn(t, client1, "SADD", "{t}myset", m)
+		cDoConn(t, client1, "SADD", "{t}myset", m)
 	}
 	cDoConn(t, client1, "SORT", "{t}myset", "ALPHA", "BY", "_", "STORE", "{t}mylist")
 	resp := cDoConn(t, client1, "LRANGE", "{t}mylist", "0", "-1")
@@ -288,8 +289,8 @@ func Test_TCL_tcl_sort_by_external_key(t *testing.T) {
 	data := [][2]string{{"0", "30"}, {"1", "10"}, {"2", "20"}}
 	for _, __pr := range data {
 		elem, weight := __pr[0], __pr[1]
-	cDoConn(t, client1, "LPUSH", "{t}tosort", elem)
-	cDoConn(t, client1, "SET", fmt.Sprintf("{t}weight_%s", elem), weight)
+		cDoConn(t, client1, "LPUSH", "{t}tosort", elem)
+		cDoConn(t, client1, "SET", fmt.Sprintf("{t}weight_%s", elem), weight)
 	}
 	resp := cDoConn(t, client1, "SORT", "{t}tosort", "BY", "{t}weight_*")
 	items := extractBulkStrings(t, resp)
@@ -303,8 +304,8 @@ func Test_TCL_tcl_sort_by_external_key_with_limit(t *testing.T) {
 	data := [][2]string{{"0", "30"}, {"1", "10"}, {"2", "20"}, {"3", "5"}, {"4", "25"}}
 	for _, __pr := range data {
 		elem, weight := __pr[0], __pr[1]
-	cDoConn(t, client1, "LPUSH", "tosort", elem)
-	cDoConn(t, client1, "SET", fmt.Sprintf("weight_%s", elem), weight)
+		cDoConn(t, client1, "LPUSH", "tosort", elem)
+		cDoConn(t, client1, "SET", fmt.Sprintf("weight_%s", elem), weight)
 	}
 	resp := cDoConn(t, client1, "SORT", "tosort", "BY", "weight_*", "LIMIT", "1", "2")
 	items := extractBulkStrings(t, resp)
@@ -318,8 +319,8 @@ func Test_TCL_tcl_sort_by_hash_field(t *testing.T) {
 	data := [][2]string{{"0", "30"}, {"1", "10"}, {"2", "20"}}
 	for _, __pr := range data {
 		elem, weight := __pr[0], __pr[1]
-	cDoConn(t, client1, "LPUSH", "{t}tosort", elem)
-	cDoConn(t, client1, "HSET", fmt.Sprintf("{t}wobj_%s", elem), "weight", weight)
+		cDoConn(t, client1, "LPUSH", "{t}tosort", elem)
+		cDoConn(t, client1, "HSET", fmt.Sprintf("{t}wobj_%s", elem), "weight", weight)
 	}
 	resp := cDoConn(t, client1, "SORT", "{t}tosort", "BY", "{t}wobj_*->weight")
 	items := extractBulkStrings(t, resp)
@@ -337,8 +338,8 @@ func Test_TCL_tcl_sort_by_key_store(t *testing.T) {
 	data := [][2]string{{"0", "30"}, {"1", "10"}, {"2", "20"}}
 	for _, __pr := range data {
 		elem, weight := __pr[0], __pr[1]
-	cDoConn(t, client1, "LPUSH", "{t}tosort", elem)
-	cDoConn(t, client1, "SET", fmt.Sprintf("{t}weight_%s", elem), weight)
+		cDoConn(t, client1, "LPUSH", "{t}tosort", elem)
+		cDoConn(t, client1, "SET", fmt.Sprintf("{t}weight_%s", elem), weight)
 	}
 	cDoConn(t, client1, "SORT", "{t}tosort", "BY", "{t}weight_*", "STORE", "{t}sort-res")
 	resp := cDoConn(t, client1, "LRANGE", "{t}sort-res", "0", "-1")
@@ -354,8 +355,8 @@ func Test_TCL_tcl_sort_by_hash_field_store(t *testing.T) {
 	data := [][2]string{{"0", "30"}, {"1", "10"}, {"2", "20"}}
 	for _, __pr := range data {
 		elem, weight := __pr[0], __pr[1]
-	cDoConn(t, client1, "LPUSH", "{t}tosort", elem)
-	cDoConn(t, client1, "HSET", fmt.Sprintf("{t}wobj_%s", elem), "weight", weight)
+		cDoConn(t, client1, "LPUSH", "{t}tosort", elem)
+		cDoConn(t, client1, "HSET", fmt.Sprintf("{t}wobj_%s", elem), "weight", weight)
 	}
 	cDoConn(t, client1, "SORT", "{t}tosort", "BY", "{t}wobj_*->weight", "STORE", "{t}sort-res")
 	resp := cDoConn(t, client1, "LRANGE", "{t}sort-res", "0", "-1")
@@ -383,11 +384,11 @@ func Test_TCL_tcl_sort_by_subsorts_lexicographically_on_tie(t *testing.T) {
 	members := []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "z", "aa", "aaa", "azz"}
 	for _, m := range members {
 		_ = m
-	cDoConn(t, client1, "SADD", "{t}myset", m)
+		cDoConn(t, client1, "SADD", "{t}myset", m)
 	}
 	for _, m := range members {
 		_ = m
-	cDoConn(t, client1, "SET", fmt.Sprintf("{t}score:%s", m), "100")
+		cDoConn(t, client1, "SET", fmt.Sprintf("{t}score:%s", m), "100")
 	}
 	resp := cDoConn(t, client1, "SORT", "{t}myset", "BY", "{t}score:*")
 	items := extractBulkStrings(t, resp)

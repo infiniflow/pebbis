@@ -51,6 +51,17 @@ type Ctx struct {
 	w Writer
 }
 
+// writeSlot takes the store's write gate for one storage write and returns its
+// release function. Inside MULTI/EXEC the transaction already holds the
+// exclusive side of the gate, so this is a no-op there: re-entering it would
+// deadlock against the transaction's own lock.
+func (c *Ctx) writeSlot() func() {
+	if c.noBlock || c.Store == nil {
+		return func() {}
+	}
+	return c.Store.writeSlot()
+}
+
 // blockSleep parks the connection until a push bumps the version past since.
 // In a MULTI/EXEC context it returns false immediately, so the caller writes a
 // nil reply instead of blocking.
@@ -92,7 +103,7 @@ func (c *Ctx) writeNull() { c.w.WriteNull() }
 // writeNullArray writes a RESP null array. This is how Redis reports a
 // blocking command that gave up (BLPOP, BRPOPLPUSH, BLMPOP, …): a plain null
 // bulk would make clients fail to parse the reply.
-func (c *Ctx) writeNullArray() { c.w.WriteArray(-1) }
+func (c *Ctx) writeNullArray()    { c.w.WriteArray(-1) }
 func (c *Ctx) writeErr(err error) { c.w.WriteError(err.Error()) }
 
 // checkArgLen validates the argument count against arity.

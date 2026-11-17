@@ -22,12 +22,6 @@ func Test_TCL_tcl_xadd_wrong_number_of_args(t *testing.T) {
 	assertErrorPrefix(t, resp, "ERR")
 }
 
-
-
-
-
-
-
 func Test_TCL_tcl_xadd_id_overflow_error(t *testing.T) {
 	addr := startServer(t)
 	_ = addr
@@ -38,10 +32,6 @@ func Test_TCL_tcl_xadd_id_overflow_error(t *testing.T) {
 	_ = resp
 	assertErrorPrefix(t, resp, "ERR")
 }
-
-
-
-
 
 func Test_TCL_tcl_xadd_auto_seq_cant_be_smaller_than_last_id(t *testing.T) {
 	addr := startServer(t)
@@ -64,24 +54,6 @@ func Test_TCL_tcl_xadd_auto_seq_cant_overflow(t *testing.T) {
 	_ = resp
 	assertErrorPrefix(t, resp, "ERR")
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 func Test_TCL_tcl_xrange_count_works(t *testing.T) {
 	addr := startServer(t)
@@ -113,10 +85,6 @@ func Test_TCL_tcl_xrevrange_count_works(t *testing.T) {
 	assertArrayLen(t, entries, 10)
 }
 
-
-
-
-
 func Test_TCL_tcl_xread_non_blocking_empty_stream(t *testing.T) {
 	addr := startServer(t)
 	_ = addr
@@ -126,10 +94,6 @@ func Test_TCL_tcl_xread_non_blocking_empty_stream(t *testing.T) {
 	_ = resp
 	assertNil(t, resp)
 }
-
-
-
-
 
 func Test_TCL_tcl_xread_last_element_from_non_empty_stream(t *testing.T) {
 	addr := startServer(t)
@@ -153,72 +117,3 @@ func Test_TCL_tcl_xread_last_element_from_empty_stream(t *testing.T) {
 	_ = resp
 	assertNil(t, resp)
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

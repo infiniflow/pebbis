@@ -90,6 +90,12 @@ type Config struct {
 	// RequirePass, when set, makes connections authenticate with AUTH before
 	// any other command is accepted.
 	RequirePass string
+	// ProtectedMode refuses connections from non-loopback addresses while no
+	// password is configured, matching Redis: a store started on a public
+	// interface must not be readable, writable or SHUTDOWN-able by anyone who
+	// can reach the port. DefaultConfig enables it; a zero Config disables it.
+	// Set RequirePass (or a TLS client certificate) to serve remote clients.
+	ProtectedMode bool
 
 	// MaxMemory is the budget for the in-memory dict, in bytes. Zero disables
 	// eviction entirely (the dict then grows without bound).
@@ -150,6 +156,7 @@ type Config struct {
 func DefaultConfig() *Config {
 	return &Config{
 		Dir:                   "",
+		ProtectedMode:         true,
 		MaxMemory:             0,
 		EvictionPolicy:        NoEviction,
 		EvictionMode:          EvictPersist,

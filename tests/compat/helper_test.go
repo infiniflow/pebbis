@@ -139,15 +139,20 @@ func serverAddrOf(t *testing.T, c *resp.Conn) string {
 	return ""
 }
 
-// do writes a command and reads one reply.
+// do writes a command and reads one reply. With no arguments it only reads one
+// pushed frame, for example a pub/sub message: writing an empty command array
+// would make the server see "*0\r\n", which Redis answers with a protocol error
+// and a disconnect, so the frame after it would never arrive.
 func do(t *testing.T, c *resp.Conn, args ...string) resp.Value {
 	t.Helper()
-	vals := make([]resp.Value, len(args))
-	for i, a := range args {
-		vals[i] = resp.StringValue(a)
-	}
-	if err := c.WriteArray(vals); err != nil {
-		t.Fatalf("write %v: %v", args, err)
+	if len(args) > 0 {
+		vals := make([]resp.Value, len(args))
+		for i, a := range args {
+			vals[i] = resp.StringValue(a)
+		}
+		if err := c.WriteArray(vals); err != nil {
+			t.Fatalf("write %v: %v", args, err)
+		}
 	}
 	v, _, err := c.ReadValue()
 	if err != nil {

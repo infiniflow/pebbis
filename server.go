@@ -6,7 +6,6 @@ import (
 	"log"
 	"net"
 	"runtime/debug"
-	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -54,14 +53,15 @@ type Server struct {
 	conns      atomic.Int64
 	nextConnID atomic.Int64
 	sem        chan struct{}
+	// tracked holds the connections that were accepted, so a connection is
+	// released exactly once whether it ends in the normal read loop or in
+	// subscriber mode (redcon does not run the close hook for detached ones).
+	tracked sync.Map
 
-	// Pub/Sub registry. redcon owns the detached connections; the maps below
-	// are our own counters, kept so PUBSUB CHANNELS / NUMSUB / NUMPAT have
-	// something to report.
-	ps       redcon.PubSub
-	psMu     sync.Mutex
-	channels map[string]int
-	patterns map[string]int
+	// Pub/Sub registry. It is our own (see pubsub_hub.go) rather than
+	// redcon's, because PUBSUB CHANNELS / NUMSUB / NUMPAT need a subscriber
+	// table that is decremented on unsubscribe and on disconnect.
+	hub *pubsubHub
 }
 
 // blockingCmds may park inside their handler while holding no other locks.
@@ -80,80 +80,59 @@ var lockFreeCmds = map[string]bool{
 	"INCR": true, "DECR": true, "INCRBY": true, "DECRBY": true, "INCRBYFLOAT": true,
 }
 
-// subscribe registers a subscriber and hands the connection to redcon, which
-// detaches it and answers subsequent subscriber-mode commands itself.
+// subscribe registers a subscriber. The hub detaches the connection on the
+// first subscription and serves it from its own read loop afterwards.
 func (srv *Server) subscribe(conn redcon.Conn, channel string, pattern bool) {
-	srv.psMu.Lock()
-	if pattern {
-		if srv.patterns == nil {
-			srv.patterns = map[string]int{}
+	srv.hub.subscribe(conn, channel, pattern)
+}
+
+// allowConn enforces protected mode: with no password configured, only loopback
+// (and unix-socket) clients are admitted. Without this a store started on :6379
+// on a public interface would accept GET/SET/SHUTDOWN from anyone who can reach
+// the port.
+func (srv *Server) allowConn(conn redcon.Conn) bool {
+	c := srv.store.Config()
+	if !c.ProtectedMode || c.RequirePass != "" {
+		return true
+	}
+	if srv.opts.Network == "unix" {
+		return true
+	}
+	host, _, err := net.SplitHostPort(conn.RemoteAddr())
+	if err == nil {
+		if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+			return true
 		}
-		srv.patterns[channel]++
-	} else {
-		if srv.channels == nil {
-			srv.channels = map[string]int{}
+	}
+	conn.WriteError("DENIED running in protected mode: no password is set, so " +
+		"only loopback connections are accepted. Set requirepass (AUTH) or " +
+		"disable protected mode to serve remote clients.")
+	return false
+}
+
+// trackConn records an accepted connection for the client counter.
+func (srv *Server) trackConn(conn redcon.Conn) {
+	srv.tracked.Store(conn, struct{}{})
+	srv.conns.Add(1)
+}
+
+// releaseConn accounts for a closed connection exactly once. redcon runs its
+// close hook for every connection, including one that was just detached, and the
+// subscriber-mode loop calls it again on exit; the tracked set makes the second
+// call a no-op. The subscription registry is cleaned by the hub itself, NOT
+// here: redcon reports a freshly detached connection as closed while it is very
+// much alive.
+func (srv *Server) releaseConn(conn redcon.Conn) {
+	if _, ok := srv.tracked.LoadAndDelete(conn); !ok {
+		return
+	}
+	srv.conns.Add(-1)
+	if srv.sem != nil {
+		select {
+		case <-srv.sem:
+		default:
 		}
-		srv.channels[channel]++
 	}
-	srv.psMu.Unlock()
-
-	if pattern {
-		srv.ps.Psubscribe(conn, channel)
-	} else {
-		srv.ps.Subscribe(conn, channel)
-	}
-}
-
-func (srv *Server) unsubscribeCount(channel string, pattern bool) {
-	srv.psMu.Lock()
-	defer srv.psMu.Unlock()
-	m := srv.channels
-	if pattern {
-		m = srv.patterns
-	}
-	if n := m[channel]; n > 1 {
-		m[channel] = n - 1
-	} else {
-		delete(m, channel)
-	}
-}
-
-// channelNames returns the active channels, optionally filtered by a glob.
-func (srv *Server) channelNames(pattern string) []string {
-	srv.psMu.Lock()
-	defer srv.psMu.Unlock()
-	out := make([]string, 0, len(srv.channels))
-	for ch := range srv.channels {
-		if pattern != "" && !globMatch(pattern, ch) {
-			continue
-		}
-		out = append(out, ch)
-	}
-	sort.Strings(out)
-	return out
-}
-
-// chanCount is one PUBSUB NUMSUB entry.
-type chanCount struct {
-	name string
-	n    int
-}
-
-// channelCounts returns subscriber counts in argument order.
-func (srv *Server) channelCounts(channels []string) []chanCount {
-	srv.psMu.Lock()
-	defer srv.psMu.Unlock()
-	out := make([]chanCount, 0, len(channels))
-	for _, ch := range channels {
-		out = append(out, chanCount{ch, srv.channels[ch]})
-	}
-	return out
-}
-
-func (srv *Server) patternCount() int {
-	srv.psMu.Lock()
-	defer srv.psMu.Unlock()
-	return len(srv.patterns)
 }
 
 // globMatch implements Redis' PUBSUB CHANNELS pattern, a simple
@@ -180,20 +159,24 @@ func NewServer(s *Store, opts ServerOptions) *Server {
 	if opts.MaxBulkLen <= 0 {
 		opts.MaxBulkLen = defaultMaxBulkLen
 	}
-	srv := &Server{store: s, opts: opts}
+	srv := &Server{store: s, opts: opts, hub: newPubsubHub()}
+	srv.hub.onClose = srv.releaseConn
 	if opts.MaxClients > 0 {
 		srv.sem = make(chan struct{}, opts.MaxClients)
 	}
 
 	handler := func(conn redcon.Conn, cmd redcon.Command) { srv.handle(conn, cmd) }
 	accept := func(conn redcon.Conn) bool {
+		if !srv.allowConn(conn) {
+			return false
+		}
 		if srv.sem == nil {
-			srv.conns.Add(1)
+			srv.trackConn(conn)
 			return true
 		}
 		select {
 		case srv.sem <- struct{}{}:
-			srv.conns.Add(1)
+			srv.trackConn(conn)
 			return true
 		default:
 			conn.WriteError("ERR max number of clients reached")
@@ -201,13 +184,7 @@ func NewServer(s *Store, opts ServerOptions) *Server {
 		}
 	}
 	closed := func(conn redcon.Conn, err error) {
-		srv.conns.Add(-1)
-		if srv.sem != nil {
-			select {
-			case <-srv.sem:
-			default:
-			}
-		}
+		srv.releaseConn(conn)
 	}
 
 	if opts.TLSConfig != nil {
@@ -351,6 +328,15 @@ func (srv *Server) handle(conn redcon.Conn, cmd redcon.Command) {
 			defer unlock()
 		}
 	}
+	// Ordinary writers take the shared side of the write gate for the whole
+	// command. MULTI/EXEC takes the exclusive side while it stages its writes,
+	// so a transaction never interleaves with a single write at the storage
+	// layer. Blocking commands are excluded: they park, so they take the gate
+	// around each individual write inside their handler instead.
+	if cm.write && !blockingCmds[upper] {
+		srv.store.writeGate.RLock()
+		defer srv.store.writeGate.RUnlock()
+	}
 
 	start := time.Now()
 	err := runCommand(c, cm, args)
@@ -402,9 +388,9 @@ type connState struct {
 	authed bool
 
 	// Transaction state.
-	inTxn    bool
-	queue    [][]string
-	watched  map[string]uint64
+	inTxn   bool
+	queue   [][]string
+	watched map[string]uint64
 	// watchedExpiry records each watched key's expiry at WATCH time (-1 when
 	// the key did not exist, 0 when it had no TTL). watchedStale records
 	// whether the key was ALREADY logically expired at WATCH time. Together

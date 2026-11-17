@@ -272,7 +272,6 @@ func TestHrandfield(t *testing.T) {
 		c.DoLoosely("HRANDFIELD", "one", "2")
 		c.DoLoosely("HRANDFIELD", "one", "7")
 
-
 		c.Error("ERR syntax error", "HRANDFIELD", "foo", "1", "2")
 		c.Error("ERR wrong number", "HRANDFIELD")
 	})

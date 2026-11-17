@@ -1,0 +1,72 @@
+name: ci
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: build, vet, test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          # Any current Go release: go.mod declares the language version only
+          # and pins no toolchain.
+          go-version: stable
+          check-latest: true
+          cache: true
+
+      - name: build
+        run: go build ./...
+
+      - name: vet
+        run: go vet ./...
+
+      - name: test
+        run: go test ./... -count=1 -timeout 900s
+
+  race:
+    name: race detector
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          check-latest: true
+          cache: true
+
+      # The race detector needs cgo, which is why this is a separate job: it is
+      # the slowest gate but it is the one that caught the counter flag race.
+      - name: test -race
+        run: go test -race ./... -count=1 -timeout 1800s
+
+  drill:
+    name: crash/restart drill
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          check-latest: true
+          cache: true
+
+      - name: build pebbisd
+        run: mkdir -p bin && go build -o bin/pebbisd ./cmd/pebbisd
+
+      # Writes a mixed workload, SIGKILLs the server and restarts it on the same
+      # directory, then checks every acknowledged write (strings, large values,
+      # hash/list/zset, stream PEL, counters, TTLs, a transaction) came back.
+      - name: SIGKILL + restart drill
+        run: go run ./tests/drill -bin ./bin/pebbisd

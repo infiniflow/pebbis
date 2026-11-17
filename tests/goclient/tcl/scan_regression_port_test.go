@@ -5,6 +5,7 @@ package tcl
 import (
 	"testing"
 )
+
 func Test_TCL_sscan_full_iteration_returns_all_members(t *testing.T) {
 	t.Skip("TODO: only 12 of its statements could be ported")
 }

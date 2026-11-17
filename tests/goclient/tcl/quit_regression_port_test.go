@@ -16,9 +16,3 @@ func Test_TCL_quit_returns_ok(t *testing.T) {
 	_ = resp
 	assertOK(t, resp)
 }
-
-
-
-
-
-

@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	"github.com/pebbis/pebbis"
+	"github.com/redis/go-redis/v9"
 )
 
 // startServer runs a store plus RESP listener on an ephemeral port.

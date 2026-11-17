@@ -59,6 +59,12 @@ type Store struct {
 	// is the correct granularity (Redis' atomicity guarantee is per-key, not
 	// global) and lets Pebble's own internal concurrency do the heavy lifting.
 	keyMu keyLockTable
+	// writeGate serialises whole transactions against single writes. Ordinary
+	// write commands take the shared side, MULTI/EXEC takes the exclusive side
+	// while it stages its writes, so nothing can slip between two queued
+	// commands at the storage layer either. Lock order is always keyMu -> gate,
+	// which is what keeps the two deadlock free.
+	writeGate sync.RWMutex
 	// aggMu is a SECOND, independent per-key sharded lock taken inside the
 	// aggregate storage layer (scanHash/scanSet/scanZSet/scanList vs saveAgg and
 	// the list mutations). It is separate from keyMu on purpose: dispatch holds
@@ -92,7 +98,33 @@ type Store struct {
 	// resume in O(1), so the mapping is kept here.
 	scanCursors *scanCursorTable
 
+	// memtableBytes is a sampled reading of Pebble's memtable footprint, used
+	// only when MaxMemory is large enough to charge the engine to the budget.
+	memtableBytes atomic.Int64
+
 	stats Stats
+}
+
+// engineBudgetFloor is the MaxMemory below which the engine's own memory is not
+// charged to the budget. A smaller cache would spend its whole budget on the
+// block cache and memtables, so every write would be rejected; those deployments
+// keep Redis' dict-only accounting.
+const engineBudgetFloor = 16 << 20
+
+// clampEngineBudget shrinks the block cache and memtable when they would eat
+// more than half of MaxMemory, leaving the rest to the data index. Without this
+// a 64 MiB block cache and a 64 MiB memtable silently oversell a 64 MiB budget.
+func clampEngineBudget(cfg *config.Config) {
+	if cfg.MaxMemory < engineBudgetFloor {
+		return
+	}
+	engine := cfg.BlockCacheSize + int64(cfg.MemTableSize)
+	if engine*2 < int64(cfg.MaxMemory) {
+		return
+	}
+	share := int64(cfg.MaxMemory) / 4
+	cfg.BlockCacheSize = share
+	cfg.MemTableSize = uint64(share)
 }
 
 // keyLockTable is a fixed array of reader/writer mutexes sharded by (db, key).
@@ -113,8 +145,8 @@ type keyLockTable struct {
 // contention on hot keys shows up in profiles.
 const keyLockShards = 1 << 13 // 8192 shards
 
-func (t *keyLockTable) lock(db uint16, key string)   { t.shards[shardIndex(db, key)].Lock() }
-func (t *keyLockTable) unlock(db uint16, key string) { t.shards[shardIndex(db, key)].Unlock() }
+func (t *keyLockTable) lock(db uint16, key string)    { t.shards[shardIndex(db, key)].Lock() }
+func (t *keyLockTable) unlock(db uint16, key string)  { t.shards[shardIndex(db, key)].Unlock() }
 func (t *keyLockTable) rlock(db uint16, key string)   { t.shards[shardIndex(db, key)].RLock() }
 func (t *keyLockTable) runlock(db uint16, key string) { t.shards[shardIndex(db, key)].RUnlock() }
 
@@ -166,8 +198,8 @@ func (t *keyLockTable) lockAll(db uint16, keys []string, write bool) func() {
 // LockKey/UnlockKey/RLockKey/RUnlockKey are the single-key entry points used by
 // callers that already know the (db, key) they touch for the whole operation
 // (the embedded API, blocking commands that re-lock inside their handler).
-func (s *Store) LockKey(db uint16, key string)   { s.keyMu.lock(db, key) }
-func (s *Store) UnlockKey(db uint16, key string) { s.keyMu.unlock(db, key) }
+func (s *Store) LockKey(db uint16, key string)    { s.keyMu.lock(db, key) }
+func (s *Store) UnlockKey(db uint16, key string)  { s.keyMu.unlock(db, key) }
 func (s *Store) RLockKey(db uint16, key string)   { s.keyMu.rlock(db, key) }
 func (s *Store) RUnlockKey(db uint16, key string) { s.keyMu.runlock(db, key) }
 
@@ -175,6 +207,16 @@ func (s *Store) RUnlockKey(db uint16, key string) { s.keyMu.runlock(db, key) }
 // keyLockTable.lockAll for the ordering and deadlock-avoidance contract.
 func (s *Store) LockKeys(db uint16, keys []string, write bool) func() {
 	return s.keyMu.lockAll(db, keys, write)
+}
+
+// writeSlot takes the shared side of the write gate for one storage write and
+// returns its release function. Only the blocking commands need it: they park
+// outside the dispatch locks, so they hold the gate around each individual write
+// instead of for the whole command (which would block MULTI/EXEC for the whole
+// timeout). Every other writer is covered by dispatch.
+func (s *Store) writeSlot() func() {
+	s.writeGate.RLock()
+	return s.writeGate.RUnlock
 }
 
 // shardIndex maps (db, key) to a shard with FNV-1a. Cheap and good enough to
@@ -200,7 +242,42 @@ func shardIndex(db uint16, key string) int {
 func (s *Store) memoryFull() bool {
 	c := s.cfg.Load()
 	return c.MaxMemory > 0 && c.EvictionPolicy == config.NoEviction &&
-		uint64(s.dict.Used()) >= c.MaxMemory
+		s.memoryUsage() >= c.MaxMemory
+}
+
+// memoryUsage is what MaxMemory is compared against. Above engineBudgetFloor it
+// charges the bytes Pebble itself holds (block cache + memtables) as well: those
+// are just as real as the index, and leaving them out is what made the budget
+// oversell the process footprint.
+func (s *Store) memoryUsage() uint64 {
+	used := uint64(s.dict.Used())
+	if s.cfg.Load().MaxMemory < engineBudgetFloor {
+		return used
+	}
+	if cache := s.eng.BlockCacheBytes(); cache > 0 {
+		used += uint64(cache)
+	}
+	if mt := s.memtableBytes.Load(); mt > 0 {
+		used += uint64(mt)
+	}
+	return used
+}
+
+// sampleEngineMemory refreshes the memtable reading. Pebble's Metrics allocates,
+// so it must not run on the write path.
+func (s *Store) sampleEngineMemory(stop <-chan struct{}) {
+	t := time.NewTicker(500 * time.Millisecond)
+	defer t.Stop()
+	for {
+		select {
+		case <-stop:
+			return
+		case <-t.C:
+			if s.cfg.Load().MaxMemory >= engineBudgetFloor {
+				s.memtableBytes.Store(s.eng.MemTableBytes())
+			}
+		}
+	}
 }
 
 // Shutdown returns a channel that is closed when a client issues SHUTDOWN.
@@ -224,6 +301,8 @@ func Open(cfg *config.Config) (*Store, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
+	// Keep Pebble's own memory inside the budget before the engine is created.
+	clampEngineBudget(cfg)
 
 	eng, err := storage.Open(cfg)
 	if err != nil {
@@ -232,8 +311,8 @@ func Open(cfg *config.Config) (*Store, error) {
 
 	clock := memory.NewClock()
 	s := &Store{
-		eng:      eng,
-		clock:    clock,
+		eng:         eng,
+		clock:       clock,
 		stop:        make(chan struct{}),
 		shutdown:    make(chan struct{}),
 		slowLog:     newSlowLog(),
@@ -248,10 +327,20 @@ func Open(cfg *config.Config) (*Store, error) {
 	// Eviction in cache mode has to remove the persisted copy too.
 	var del func(db uint16, key string) error
 	if cfg.EvictionMode == config.EvictCache {
-		del = func(db uint16, key string) error { return s.deletePersisted(db, key) }
+		del = func(db uint16, key string) error {
+			// Background eviction must never write into an open transaction
+			// stage, so it takes the shared side of the gate.
+			s.writeGate.RLock()
+			defer s.writeGate.RUnlock()
+			return s.deletePersisted(db, key)
+		}
 	}
-	s.evictor = memory.NewEvictor(&s.cfg, dict, del)
-	s.expirer = memory.NewExpirer(eng, dict, clock, &s.cfg)
+	// Eviction inside a transaction would either deadlock on the gate or delete
+	// keys the transaction is about to write, so it waits for the next tick.
+	s.evictor = memory.NewEvictor(&s.cfg, dict, del, s.memoryUsage, func() bool {
+		return s.eng.Staged()
+	})
+	s.expirer = memory.NewExpirer(eng, dict, clock, &s.cfg, s.writeGate.RLocker())
 	s.blocker = newBlocker()
 
 	if cfg.LoadMode == config.LoadAll {
@@ -262,9 +351,10 @@ func Open(cfg *config.Config) (*Store, error) {
 		}
 	}
 
-	s.wg.Add(2)
+	s.wg.Add(3)
 	go func() { defer s.wg.Done(); s.expirer.Run(s.stop) }()
 	go func() { defer s.wg.Done(); s.evictor.Run(s.stop) }()
+	go func() { defer s.wg.Done(); s.sampleEngineMemory(s.stop) }()
 
 	return s, nil
 }
@@ -338,6 +428,10 @@ func (s *Store) Flush() error { return s.eng.Flush() }
 
 // UsedMemory returns the estimated bytes held by the in-memory index.
 func (s *Store) UsedMemory() int64 { return s.dict.Used() }
+
+// TotalMemory returns everything charged against MaxMemory: the index plus, when
+// the budget is large enough to include them, the block cache and memtables.
+func (s *Store) TotalMemory() int64 { return int64(s.memoryUsage()) }
 
 // BlockCacheMemory returns the current Pebble block cache usage.
 func (s *Store) BlockCacheMemory() int64 { return s.eng.BlockCacheBytes() }

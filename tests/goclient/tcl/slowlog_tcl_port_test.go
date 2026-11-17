@@ -18,27 +18,3 @@ func Test_TCL_tcl_slowlog_check_that_it_starts_with_an_empty_log(t *testing.T) {
 	r = cDo(t, client1, "SLOWLOG", "LEN")
 	assertIntegerEq(t, r, 0)
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

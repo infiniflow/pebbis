@@ -5,6 +5,7 @@ package tcl
 import (
 	"testing"
 )
+
 func Test_TCL_copy_with_invalid_destination_db_returns_error(t *testing.T) {
 	addr := startServer(t)
 	client1 := connectConn(t, addr)

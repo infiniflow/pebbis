@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -19,6 +20,11 @@ type Expirer struct {
 	dict  *Dict
 	clock *Clock
 	cfg   *atomic.Pointer[config.Config]
+	// gate, when set, is the shared side of the store's write gate: an expiry
+	// cycle must not write into an open transaction stage. The lazy path
+	// (DeleteNow) is called from command handlers that already hold the gate, so
+	// it deliberately does not take it again.
+	gate sync.Locker
 
 	expired atomic.Int64
 	// enabled toggles the active expiry cycle (DEBUG SET-ACTIVE-EXPIRE).
@@ -28,9 +34,9 @@ type Expirer struct {
 
 // NewExpirer builds an expirer over eng and dict. cfg is the store-wide
 // atomically-swapped configuration so a CONFIG SET that lands mid-cycle is
-// picked up on the next tick rather than torn.
-func NewExpirer(eng *storage.Engine, dict *Dict, clock *Clock, cfg *atomic.Pointer[config.Config]) *Expirer {
-	x := &Expirer{eng: eng, dict: dict, clock: clock, cfg: cfg}
+// picked up on the next tick rather than torn. gate may be nil.
+func NewExpirer(eng *storage.Engine, dict *Dict, clock *Clock, cfg *atomic.Pointer[config.Config], gate sync.Locker) *Expirer {
+	x := &Expirer{eng: eng, dict: dict, clock: clock, cfg: cfg, gate: gate}
 	x.enabled.Store(true)
 	return x
 }
@@ -64,6 +70,10 @@ func (x *Expirer) Run(stop <-chan struct{}) {
 // removed. It stops early once the cycle budget is exhausted so that expiry
 // never monopolises a CPU.
 func (x *Expirer) Cycle() (int, error) {
+	if x.gate != nil {
+		x.gate.Lock()
+		defer x.gate.Unlock()
+	}
 	now := x.clock.NowMilli()
 	deadline := time.Now().Add(x.cfg.Load().ExpireCycleBudget)
 

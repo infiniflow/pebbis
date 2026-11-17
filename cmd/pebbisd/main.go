@@ -25,6 +25,8 @@ func main() {
 		databases   = flag.Int("databases", 16, "number of logical databases")
 		requirePass = flag.String("requirepass", "", "require clients to issue AUTH with this password")
 		maxClients  = flag.Int("maxclients", 0, "cap on concurrent connections (0 = unlimited)")
+		protected   = flag.Bool("protected-mode", true,
+			"refuse non-loopback connections while no password is set")
 	)
 	flag.Parse()
 
@@ -41,6 +43,7 @@ func main() {
 	cfg.SyncPolicy = config.SyncPolicy(*syncMode)
 	cfg.Databases = *databases
 	cfg.RequirePass = *requirePass
+	cfg.ProtectedMode = *protected
 
 	if err := cfg.Validate(); err != nil {
 		log.Fatalf("invalid configuration: %v", err)

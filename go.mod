@@ -1,13 +1,13 @@
 module github.com/pebbis/pebbis
 
-go 1.26.7
+go 1.26.0
 
 require (
 	github.com/cockroachdb/pebble v1.1.5
-	github.com/gobwas/glob v1.0.0
-	github.com/redis/go-redis/v9 v9.0.0-00010101000000-000000000000
+	github.com/redis/go-redis/v9 v9.23.0
 	github.com/tidwall/redcon v1.6.4
 	github.com/tidwall/resp v0.1.1
+	github.com/yuin/gopher-lua v1.1.1
 )
 
 require (
@@ -35,12 +35,9 @@ require (
 	github.com/rogpeppe/go-internal v1.9.0 // indirect
 	github.com/tidwall/btree v1.1.0 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
-	github.com/yuin/gopher-lua v1.1.1 // indirect
-	go.uber.org/atomic v1.11.0 // indirect
+	go.uber.org/atomic v1.12.0 // indirect
 	golang.org/x/exp v0.0.0-20230626212559-97b1e661b5df // indirect
-	golang.org/x/sys v0.30.0 // indirect
+	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	google.golang.org/protobuf v1.33.0 // indirect
 )
-
-replace github.com/redis/go-redis/v9 => ../go-redis

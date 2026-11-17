@@ -44,10 +44,6 @@ func Test_TCL_tcl_lpos_rank_option(t *testing.T) {
 	assertErrorPrefix(t, r, "ERR")
 }
 
-
-
-
-
 func Test_TCL_tcl_lpos_non_existing_key(t *testing.T) {
 	addr := startServer(t)
 	_ = addr
@@ -80,8 +76,6 @@ func Test_TCL_tcl_lpos_no_match(t *testing.T) {
 	_ = r
 	assertNil(t, r)
 }
-
-
 
 func Test_TCL_tcl_lpush_rpush_llength_lindex_lpop(t *testing.T) {
 	addr := startServer(t)
@@ -124,10 +118,6 @@ func Test_TCL_tcl_lpop_rpop_wrong_number_of_arguments(t *testing.T) {
 	assertErrorPrefix(t, r, "ERR")
 }
 
-
-
-
-
 func Test_TCL_tcl_del_a_list(t *testing.T) {
 	addr := startServer(t)
 	_ = addr
@@ -160,12 +150,6 @@ func Test_TCL_tcl_lpushx_rpushx_generic(t *testing.T) {
 	r = cDo(t, client1, "LLEN", "xlist")
 	assertIntegerEq(t, r, 0)
 }
-
-
-
-
-
-
 
 func Test_TCL_tcl_llen_against_non_list_value_error(t *testing.T) {
 	addr := startServer(t)
@@ -232,10 +216,6 @@ func Test_TCL_tcl_rpush_against_non_list_value_error(t *testing.T) {
 	assertErrorPrefix(t, r, "WRONGTYPE")
 }
 
-
-
-
-
 func Test_TCL_tcl_rpoplpush_against_non_existing_key(t *testing.T) {
 	addr := startServer(t)
 	_ = addr
@@ -276,10 +256,6 @@ func Test_TCL_tcl_rpoplpush_against_non_list_dst_key(t *testing.T) {
 	assertErrorPrefix(t, r, "WRONGTYPE")
 }
 
-
-
-
-
 func Test_TCL_tcl_lpop_rpop_lmpop_against_empty_list(t *testing.T) {
 	addr := startServer(t)
 	_ = addr
@@ -310,10 +286,6 @@ func Test_TCL_tcl_lpop_rpop_against_non_list_value(t *testing.T) {
 	assertErrorPrefix(t, r, "WRONGTYPE")
 }
 
-
-
-
-
 func Test_TCL_tcl_lrange_inverted_indexes(t *testing.T) {
 	addr := startServer(t)
 	_ = addr
@@ -331,8 +303,6 @@ func Test_TCL_tcl_lrange_inverted_indexes(t *testing.T) {
 		t.Fatalf("assert!(%s.is_empty()) failed", "items")
 	}
 }
-
-
 
 func Test_TCL_tcl_lrange_against_non_existing_key(t *testing.T) {
 	addr := startServer(t)
@@ -369,10 +339,6 @@ func Test_TCL_tcl_lrange_start_gt_end_yields_empty_array_backward_compatibility(
 	}
 }
 
-
-
-
-
 func Test_TCL_tcl_lset_out_of_range_index(t *testing.T) {
 	addr := startServer(t)
 	_ = addr
@@ -406,10 +372,6 @@ func Test_TCL_tcl_lset_against_non_list_value(t *testing.T) {
 	assertErrorPrefix(t, r, "WRONGTYPE")
 }
 
-
-
-
-
 func Test_TCL_tcl_lrem_remove_non_existing_element(t *testing.T) {
 	addr := startServer(t)
 	_ = addr
@@ -421,8 +383,6 @@ func Test_TCL_tcl_lrem_remove_non_existing_element(t *testing.T) {
 	_ = r
 	assertIntegerEq(t, r, 0)
 }
-
-
 
 func Test_TCL_tcl_lrem_deleting_objects_that_may_be_int_encoded(t *testing.T) {
 	addr := startServer(t)
@@ -437,22 +397,6 @@ func Test_TCL_tcl_lrem_deleting_objects_that_may_be_int_encoded(t *testing.T) {
 	r = cDo(t, client1, "LLEN", "myotherlist")
 	assertIntegerEq(t, r, 3)
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 func Test_TCL_tcl_blpop_with_negative_timeout(t *testing.T) {
 	addr := startServer(t)
@@ -473,12 +417,6 @@ func Test_TCL_tcl_brpop_with_negative_timeout(t *testing.T) {
 	_ = resp
 	assertErrorPrefix(t, resp, "ERR")
 }
-
-
-
-
-
-
 
 func Test_TCL_tcl_blpop_second_argument_is_not_a_list(t *testing.T) {
 	addr := startServer(t)
@@ -502,12 +440,6 @@ func Test_TCL_tcl_blpop_timeout_value_out_of_range(t *testing.T) {
 	assertErrorPrefix(t, resp, "ERR")
 }
 
-
-
-
-
-
-
 func Test_TCL_tcl_brpoplpush_existing_list(t *testing.T) {
 	addr := startServer(t)
 	_ = addr
@@ -523,10 +455,6 @@ func Test_TCL_tcl_brpoplpush_existing_list(t *testing.T) {
 	_ = r
 	assertBulkEq(t, r, "d")
 }
-
-
-
-
 
 func Test_TCL_tcl_brpoplpush_with_wrong_source_type(t *testing.T) {
 	addr := startServer(t)
@@ -581,71 +509,3 @@ func Test_TCL_tcl_blmove_left_right_existing_list(t *testing.T) {
 	_ = r
 	assertBulkEq(t, r, "a")
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

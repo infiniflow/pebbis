@@ -7,8 +7,6 @@ import (
 	"testing"
 )
 
-
-
 func Test_TCL_leading_zeros_preserved_in_string_values(t *testing.T) {
 	addr := startServer(t)
 	_ = addr

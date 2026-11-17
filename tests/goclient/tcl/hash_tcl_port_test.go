@@ -7,10 +7,6 @@ import (
 	"testing"
 )
 
-
-
-
-
 func Test_TCL_tcl_hget_against_non_existing_key(t *testing.T) {
 	addr := startServer(t)
 	_ = addr
@@ -73,10 +69,6 @@ func Test_TCL_tcl_hset_hmset_wrong_number_of_args(t *testing.T) {
 	r = cDo(t, client1, "HMSET", "myhash", "key1", "val1", "key2")
 	assertErrorPrefix(t, r, "ERR")
 }
-
-
-
-
 
 func Test_TCL_tcl_hgetall_against_non_existing_key(t *testing.T) {
 	addr := startServer(t)
@@ -149,8 +141,6 @@ func Test_TCL_tcl_hincrby_against_non_existing_database_key(t *testing.T) {
 	_ = r
 	assertIntegerEq(t, r, 2)
 }
-
-
 
 func Test_TCL_tcl_hincrby_against_non_existing_hash_key(t *testing.T) {
 	addr := startServer(t)
@@ -254,16 +244,6 @@ func Test_TCL_tcl_hincrby_can_detect_overflows(t *testing.T) {
 	assertErrorPrefix(t, r, "ERR")
 }
 
-
-
-
-
-
-
-
-
-
-
 func Test_TCL_tcl_hstrlen_against_non_existing_field(t *testing.T) {
 	addr := startServer(t)
 	_ = addr
@@ -274,8 +254,6 @@ func Test_TCL_tcl_hstrlen_against_non_existing_field(t *testing.T) {
 	_ = r
 	assertIntegerEq(t, r, 0)
 }
-
-
 
 func Test_TCL_tcl_hrandfield_count_of_0_is_handled_correctly(t *testing.T) {
 	addr := startServer(t)
@@ -334,8 +312,6 @@ func Test_TCL_tcl_hrandfield_negative_count_allows_duplicates(t *testing.T) {
 	assertArrayLen(t, resp, 40)
 }
 
-
-
 func Test_TCL_tcl_hgetdel_input_validation(t *testing.T) {
 	addr := startServer(t)
 	_ = addr
@@ -362,16 +338,6 @@ func Test_TCL_tcl_hgetdel_input_validation(t *testing.T) {
 	r = cDo(t, client1, "HGETDEL", "key1", "FIELDS", "-1", "a")
 	assertErrorPrefix(t, r, "ERR")
 }
-
-
-
-
-
-
-
-
-
-
 
 func Test_TCL_tcl_hmset_hmget_roundtrip(t *testing.T) {
 	addr := startServer(t)
@@ -407,13 +373,3 @@ func Test_TCL_tcl_hdel_and_return_value(t *testing.T) {
 	r = cDo(t, client1, "HGET", "myhash", "f1")
 	assertNil(t, r)
 }
-
-
-
-
-
-
-
-
-
-

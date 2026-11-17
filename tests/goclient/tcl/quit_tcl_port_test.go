@@ -5,6 +5,7 @@ package tcl
 import (
 	"testing"
 )
+
 func Test_TCL_tcl_quit_returns_ok(t *testing.T) {
 	t.Skip("TODO: blocking client helper (blocker/writer) not supported by tcl harness")
 }

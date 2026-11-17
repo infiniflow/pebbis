@@ -7,10 +7,6 @@ import (
 	"testing"
 )
 
-
-
-
-
 func Test_TCL_xadd_rejects_non_monotonic_explicit_ids(t *testing.T) {
 	addr := startServer(t)
 	_ = addr
@@ -21,15 +17,3 @@ func Test_TCL_xadd_rejects_non_monotonic_explicit_ids(t *testing.T) {
 	_ = resp
 	assertErrorPrefix(t, resp, "ERR")
 }
-
-
-
-
-
-
-
-
-
-
-
-

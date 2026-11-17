@@ -29,8 +29,6 @@ func Test_TCL_tcl_set_and_get_an_empty_item(t *testing.T) {
 	assertBulkEq(t, r, "")
 }
 
-
-
 func Test_TCL_tcl_setnx_target_key_missing(t *testing.T) {
 	addr := startServer(t)
 	_ = addr
@@ -71,15 +69,6 @@ func Test_TCL_tcl_setnx_against_not_expired_volatile_key(t *testing.T) {
 	assertBulkEq(t, r, "10")
 }
 
-
-
-
-
-
-
-
-
-
 func Test_TCL_tcl_getdel_command(t *testing.T) {
 	addr := startServer(t)
 	_ = addr
@@ -109,10 +98,6 @@ func Test_TCL_tcl_mget(t *testing.T) {
 	assertBulkEqAny(t, items[0], "BAR")
 	assertBulkEqAny(t, items[1], "FOO")
 }
-
-
-
-
 
 func Test_TCL_tcl_getset_set_new_value(t *testing.T) {
 	addr := startServer(t)
@@ -271,19 +256,6 @@ func Test_TCL_tcl_strlen_against_plain_string(t *testing.T) {
 	assertIntegerEq(t, r, 20)
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
 func Test_TCL_tcl_setrange_against_string_encoded_key(t *testing.T) {
 	addr := startServer(t)
 	_ = addr
@@ -351,8 +323,6 @@ func Test_TCL_tcl_setrange_against_key_with_wrong_type(t *testing.T) {
 	_ = r
 	assertErrorPrefix(t, r, "WRONGTYPE")
 }
-
-
 
 func Test_TCL_tcl_getrange_against_non_existing_key(t *testing.T) {
 	addr := startServer(t)
@@ -604,18 +574,6 @@ func Test_TCL_tcl_extended_set_get_option_with_nx_and_previous_value(t *testing.
 	assertBulkEq(t, r, "bar")
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
 func Test_TCL_tcl_getrange_with_huge_ranges_github_issue_1844(t *testing.T) {
 	addr := startServer(t)
 	_ = addr
@@ -626,18 +584,6 @@ func Test_TCL_tcl_getrange_with_huge_ranges_github_issue_1844(t *testing.T) {
 	_ = r
 	assertBulkEq(t, r, "bar")
 }
-
-
-
-
-
-
-
-
-
-
-
-
 
 func Test_TCL_tcl_append_modifies_the_encoding_from_int_to_raw(t *testing.T) {
 	addr := startServer(t)
@@ -654,75 +600,6 @@ func Test_TCL_tcl_append_modifies_the_encoding_from_int_to_raw(t *testing.T) {
 	r = cDo(t, client1, "GET", "bar")
 	assertBulkEq(t, r, "12")
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 func Test_TCL_tcl_msetex_error_cases(t *testing.T) {
 	addr := startServer(t)

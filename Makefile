@@ -1,5 +1,7 @@
 BINARY  := pebbisd
 GO      ?= go
+# Pebbis itself is pure Go; the race detector is the only target that needs cgo.
+CGO_ENABLED ?= 0
 PKGS    := ./...
 PEBBISD ?= $(CURDIR)/bin/$(BINARY)
 
@@ -19,33 +21,34 @@ CONCTEST_DIR ?= tests/conctest
 # Override with BENCH_ARGS, e.g. `make bench-net BENCH_ARGS="-clients 32 -duration 15s -workload mixed"`.
 BENCH_ARGS ?= -clients 64 -duration 20s -workload mixed
 
-.PHONY: all build test integration race bench bench-net bench-net-race cover fmt vet clean soak soak.stop
+.PHONY: all build test integration race bench bench-net bench-net-race cover fmt vet clean soak soak.stop drill
 
 all: build
 
 build:
-	$(GO) build -o bin/$(BINARY) ./cmd/$(BINARY)
+	@mkdir -p bin
+	CGO_ENABLED=$(CGO_ENABLED) $(GO) build -o bin/$(BINARY) ./cmd/$(BINARY)
 
 # Unit tests for the whole module. The integration suite lives under
 # tests/miniredis/integration and skips itself unless INT=1 is set, so this
 # target stays green without an external redis.
 test:
-	$(GO) test -count=1 $(PKGS)
+	CGO_ENABLED=$(CGO_ENABLED) $(GO) test -count=1 $(PKGS)
 
 # Differential integration suite: runs miniredis' test harness against pebbisd,
 # asserting the two behave identically. Requires the pebbisd binary.
 integration: build
-	INT=1 PEBBISD=$(PEBBISD) $(GO) test -count=1 ./tests/miniredis/integration/
+	INT=1 PEBBISD=$(PEBBISD) CGO_ENABLED=$(CGO_ENABLED) $(GO) test -count=1 ./tests/miniredis/integration/
 
 # Full suite with the race detector; the default gate for every change.
 race:
-	$(GO) test -race -count=1 $(PKGS)
+	CGO_ENABLED=1 $(GO) test -race -count=1 $(PKGS)
 
 bench:
-	$(GO) test -run '^$$' -bench . -benchmem ./...
+	CGO_ENABLED=$(CGO_ENABLED) $(GO) test -run '^$$' -bench . -benchmem ./...
 
 cover:
-	$(GO) test -coverprofile=coverage.out $(PKGS)
+	CGO_ENABLED=$(CGO_ENABLED) $(GO) test -coverprofile=coverage.out $(PKGS)
 	$(GO) tool cover -func=coverage.out | tail -1
 	$(GO) tool cover -html=coverage.out -o coverage.html
 
@@ -82,6 +85,13 @@ soak.stop:
 	@if [ -f $(SOAK_PID) ]; then kill `cat $(SOAK_PID)` 2>/dev/null; rm -f $(SOAK_PID); fi
 	@pkill -f '$(PEBBISD) -addr $(SOAK_ADDR)' 2>/dev/null || true
 
+# drill is the restart drill: start pebbisd, write a mixed workload (strings,
+# large values, hash/list/zset, stream PEL, counters, TTLs, a transaction),
+# SIGKILL it without any graceful shutdown, restart on the same directory and
+# check every acknowledged write came back. Runs with -appendfsync always.
+drill: build
+	CGO_ENABLED=$(CGO_ENABLED) $(GO) run ./tests/drill -bin $(PEBBISD)
+
 # bench-net starts a fresh pebbisd, runs the network-level load benchmark from
 # tests/bench against it, and shuts the server down afterwards. Use BENCH_ARGS
 # to tune clients/duration/workload. (The in-process data-path micro-benchmarks
@@ -97,7 +107,7 @@ bench-net: build
 	  sleep 0.2; \
 	done
 	@echo "running benchmark ($(BENCH_ARGS))..."
-	@REDIS_ADDR=$(SOAK_ADDR) $(GO) run ./tests/bench $(BENCH_ARGS); \
+	@$(GO) run ./tests/bench -addr $(SOAK_ADDR) $(BENCH_ARGS); \
 	  rc=$$?; \
 	  if [ -f $(SOAK_PID) ]; then kill `cat $(SOAK_PID)` 2>/dev/null; rm -f $(SOAK_PID); fi; \
 	  exit $$rc

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 )
+
 func Test_TCL_tcl_multi_exec_basics(t *testing.T) {
 	addr := startServer(t)
 	client1 := connectConn(t, addr)
@@ -18,10 +19,14 @@ func Test_TCL_tcl_multi_exec_basics(t *testing.T) {
 	assertQueued(t, cDoConn(t, client1, "PING"))
 	resp := cDoConn(t, client1, "EXEC")
 	results := unwrapArray(t, resp)
-	if len(results) != 2 { t.Fatalf("len mismatch: got %d want 2", len(results)) }
+	if len(results) != 2 {
+		t.Fatalf("len mismatch: got %d want 2", len(results))
+	}
 	items := extractBulkStrings(t, results[0])
 	assertStringsEq(t, items, "a", "b", "c")
-	if results[1].val != "PONG" { t.Fatalf("match failed: got %v", results[1].val) }
+	if results[1].val != "PONG" {
+		t.Fatalf("match failed: got %v", results[1].val)
+	}
 }
 
 func Test_TCL_tcl_discard(t *testing.T) {
@@ -56,7 +61,9 @@ func Test_TCL_tcl_multi_where_commands_alter_argc_argv(t *testing.T) {
 	assertQueued(t, cDoConn(t, client1, "SPOP", "myset"))
 	resp := cDoConn(t, client1, "EXEC")
 	results := unwrapArray(t, resp)
-	if len(results) != 1 { t.Fatalf("len mismatch: got %d want 1", len(results)) }
+	if len(results) != 1 {
+		t.Fatalf("len mismatch: got %d want 1", len(results))
+	}
 	assertBulkEq(t, results[0], "a")
 	cDoConn(t, client1, "EXISTS", "myset")
 }
@@ -96,7 +103,9 @@ func Test_TCL_tcl_if_exec_aborts_client_multi_state_cleared(t *testing.T) {
 	exec_resp := cDoConn(t, client1, "EXEC")
 	assertErrorPrefix(t, exec_resp, "EXECABORT")
 	resp := cDoConn(t, client1, "PING")
-	if resp.val != "PONG" { t.Fatalf("match failed: got %v", resp.val) }
+	if resp.val != "PONG" {
+		t.Fatalf("match failed: got %v", resp.val)
+	}
 }
 
 func Test_TCL_tcl_exec_works_on_watched_key_not_modified(t *testing.T) {
@@ -108,8 +117,12 @@ func Test_TCL_tcl_exec_works_on_watched_key_not_modified(t *testing.T) {
 	assertQueued(t, cDoConn(t, client1, "PING"))
 	resp := cDoConn(t, client1, "EXEC")
 	results := unwrapArray(t, resp)
-	if len(results) != 1 { t.Fatalf("len mismatch: got %d want 1", len(results)) }
-	if results[0].val != "PONG" { t.Fatalf("match failed: got %v", results[0].val) }
+	if len(results) != 1 {
+		t.Fatalf("len mismatch: got %d want 1", len(results))
+	}
+	if results[0].val != "PONG" {
+		t.Fatalf("match failed: got %v", results[0].val)
+	}
 }
 
 func Test_TCL_tcl_exec_fail_on_watched_key_modified_1_of_1(t *testing.T) {
@@ -159,15 +172,23 @@ func Test_TCL_tcl_after_successful_exec_key_no_longer_watched(t *testing.T) {
 	assertQueued(t, cDoConn(t, client1, "PING"))
 	resp := cDoConn(t, client1, "EXEC")
 	results := unwrapArray(t, resp)
-	if len(results) != 1 { t.Fatalf("len mismatch: got %d want 1", len(results)) }
-	if results[0].val != "PONG" { t.Fatalf("match failed: got %v", results[0].val) }
+	if len(results) != 1 {
+		t.Fatalf("len mismatch: got %d want 1", len(results))
+	}
+	if results[0].val != "PONG" {
+		t.Fatalf("match failed: got %v", results[0].val)
+	}
 	cDoConn(t, client1, "SET", "x", "40")
 	assertOK(t, cDoConn(t, client1, "MULTI"))
 	assertQueued(t, cDoConn(t, client1, "PING"))
 	resp = cDoConn(t, client1, "EXEC")
 	results = unwrapArray(t, resp)
-	if len(results) != 1 { t.Fatalf("len mismatch: got %d want 1", len(results)) }
-	if results[0].val != "PONG" { t.Fatalf("match failed: got %v", results[0].val) }
+	if len(results) != 1 {
+		t.Fatalf("len mismatch: got %d want 1", len(results))
+	}
+	if results[0].val != "PONG" {
+		t.Fatalf("match failed: got %v", results[0].val)
+	}
 }
 
 func Test_TCL_tcl_after_failed_exec_key_no_longer_watched(t *testing.T) {
@@ -185,8 +206,12 @@ func Test_TCL_tcl_after_failed_exec_key_no_longer_watched(t *testing.T) {
 	assertQueued(t, cDoConn(t, client1, "PING"))
 	resp = cDoConn(t, client1, "EXEC")
 	results := unwrapArray(t, resp)
-	if len(results) != 1 { t.Fatalf("len mismatch: got %d want 1", len(results)) }
-	if results[0].val != "PONG" { t.Fatalf("match failed: got %v", results[0].val) }
+	if len(results) != 1 {
+		t.Fatalf("len mismatch: got %d want 1", len(results))
+	}
+	if results[0].val != "PONG" {
+		t.Fatalf("match failed: got %v", results[0].val)
+	}
 }
 
 func Test_TCL_tcl_it_is_possible_to_unwatch(t *testing.T) {
@@ -200,8 +225,12 @@ func Test_TCL_tcl_it_is_possible_to_unwatch(t *testing.T) {
 	assertQueued(t, cDoConn(t, client1, "PING"))
 	resp := cDoConn(t, client1, "EXEC")
 	results := unwrapArray(t, resp)
-	if len(results) != 1 { t.Fatalf("len mismatch: got %d want 1", len(results)) }
-	if results[0].val != "PONG" { t.Fatalf("match failed: got %v", results[0].val) }
+	if len(results) != 1 {
+		t.Fatalf("len mismatch: got %d want 1", len(results))
+	}
+	if results[0].val != "PONG" {
+		t.Fatalf("match failed: got %v", results[0].val)
+	}
 }
 
 func Test_TCL_tcl_unwatch_when_nothing_watched(t *testing.T) {
@@ -232,8 +261,12 @@ func Test_TCL_tcl_flushall_does_not_touch_non_affected_keys(t *testing.T) {
 	assertQueued(t, cDoConn(t, client1, "PING"))
 	resp := cDoConn(t, client1, "EXEC")
 	results := unwrapArray(t, resp)
-	if len(results) != 1 { t.Fatalf("len mismatch: got %d want 1", len(results)) }
-	if results[0].val != "PONG" { t.Fatalf("match failed: got %v", results[0].val) }
+	if len(results) != 1 {
+		t.Fatalf("len mismatch: got %d want 1", len(results))
+	}
+	if results[0].val != "PONG" {
+		t.Fatalf("match failed: got %v", results[0].val)
+	}
 }
 
 func Test_TCL_tcl_flushdb_touches_watched_keys(t *testing.T) {
@@ -258,8 +291,12 @@ func Test_TCL_tcl_flushdb_does_not_touch_non_affected_keys(t *testing.T) {
 	assertQueued(t, cDoConn(t, client1, "PING"))
 	resp := cDoConn(t, client1, "EXEC")
 	results := unwrapArray(t, resp)
-	if len(results) != 1 { t.Fatalf("len mismatch: got %d want 1", len(results)) }
-	if results[0].val != "PONG" { t.Fatalf("match failed: got %v", results[0].val) }
+	if len(results) != 1 {
+		t.Fatalf("len mismatch: got %d want 1", len(results))
+	}
+	if results[0].val != "PONG" {
+		t.Fatalf("match failed: got %v", results[0].val)
+	}
 }
 
 func Test_TCL_tcl_watch_considers_expire_on_watched_key(t *testing.T) {
@@ -302,7 +339,9 @@ func Test_TCL_tcl_discard_clears_watch_dirty_flag(t *testing.T) {
 	assertQueued(t, cDoConn(t, client1, "INCR", "x"))
 	resp := cDoConn(t, client1, "EXEC")
 	results := unwrapArray(t, resp)
-	if len(results) != 1 { t.Fatalf("len mismatch: got %d want 1", len(results)) }
+	if len(results) != 1 {
+		t.Fatalf("len mismatch: got %d want 1", len(results))
+	}
 	assertIntegerEq(t, results[0], 11)
 }
 
@@ -318,7 +357,9 @@ func Test_TCL_tcl_discard_unwatches_all_keys(t *testing.T) {
 	assertQueued(t, cDoConn(t, client1, "INCR", "x"))
 	resp := cDoConn(t, client1, "EXEC")
 	results := unwrapArray(t, resp)
-	if len(results) != 1 { t.Fatalf("len mismatch: got %d want 1", len(results)) }
+	if len(results) != 1 {
+		t.Fatalf("len mismatch: got %d want 1", len(results))
+	}
 	assertIntegerEq(t, results[0], 11)
 }
 
@@ -345,14 +386,16 @@ func Test_TCL_tcl_blocking_commands_ignore_timeout_in_multi(t *testing.T) {
 	// PORT-TODO: );
 	resp := cDoConn(t, client1, "EXEC")
 	results := unwrapArray(t, resp)
-	if len(results) != 10 { t.Fatalf("len mismatch: got %d want 10", len(results)) }
+	if len(results) != 10 {
+		t.Fatalf("len mismatch: got %d want 10", len(results))
+	}
 	for i, r := range results {
 		_ = i
 		_ = r
-	// PORT-TODO: assert!(
-	// PORT-TODO: matches!(r, Response::Bulk(None) | Response::Null),
-	// PORT-TODO: "expected nil for blocking command {i}, got {r:?}"
-	// PORT-TODO: );
+		// PORT-TODO: assert!(
+		// PORT-TODO: matches!(r, Response::Bulk(None) | Response::Null),
+		// PORT-TODO: "expected nil for blocking command {i}, got {r:?}"
+		// PORT-TODO: );
 	}
 }
 
@@ -368,18 +411,28 @@ func Test_TCL_tcl_blmpop_bzmpop_return_data_immediately_in_multi(t *testing.T) {
 	// PORT-TODO: );
 	resp := cDoConn(t, client1, "EXEC")
 	results := unwrapArray(t, resp)
-	if len(results) != 2 { t.Fatalf("len mismatch: got %d want 2", len(results)) }
+	if len(results) != 2 {
+		t.Fatalf("len mismatch: got %d want 2", len(results))
+	}
 	blmpop := unwrapArray(t, results[0])
-	if len(blmpop) != 2 { t.Fatalf("len mismatch: got %d want 2", len(blmpop)) }
+	if len(blmpop) != 2 {
+		t.Fatalf("len mismatch: got %d want 2", len(blmpop))
+	}
 	assertBulkEq(t, blmpop[0], "list{t}")
 	popped := unwrapArray(t, blmpop[1])
-	if len(popped) != 1 { t.Fatalf("len mismatch: got %d want 1", len(popped)) }
+	if len(popped) != 1 {
+		t.Fatalf("len mismatch: got %d want 1", len(popped))
+	}
 	assertBulkEq(t, popped[0], "a")
 	bzmpop := unwrapArray(t, results[1])
-	if len(bzmpop) != 2 { t.Fatalf("len mismatch: got %d want 2", len(bzmpop)) }
+	if len(bzmpop) != 2 {
+		t.Fatalf("len mismatch: got %d want 2", len(bzmpop))
+	}
 	assertBulkEq(t, bzmpop[0], "zset{t}")
 	popped = unwrapArray(t, bzmpop[1])
-	if len(popped) != 1 { t.Fatalf("len mismatch: got %d want 1", len(popped)) }
+	if len(popped) != 1 {
+		t.Fatalf("len mismatch: got %d want 1", len(popped))
+	}
 	member := unwrapArray(t, popped[0])
 	assertBulkEq(t, member[0], "one")
 	assertBulkEq(t, member[1], "1")
@@ -393,7 +446,9 @@ func Test_TCL_tcl_flushall_while_watching_several_keys_one_client(t *testing.T) 
 	assertOK(t, cDoConn(t, client1, "WATCH", "b{t}", "a{t}"))
 	cDoConn(t, client1, "FLUSHALL")
 	resp := cDoConn(t, client1, "PING")
-	if resp.val != "PONG" { t.Fatalf("match failed: got %v", resp.val) }
+	if resp.val != "PONG" {
+		t.Fatalf("match failed: got %v", resp.val)
+	}
 }
 
 func Test_TCL_tcl_exec_with_at_least_one_use_memory_command_should_fail(t *testing.T) {
@@ -408,9 +463,18 @@ func Test_TCL_tcl_exec_with_at_least_one_use_memory_command_should_fail(t *testi
 	assertOK(t, cDoConn(t, client1, "MULTI"))
 	assertQueued(t, cDoConn(t, client1, "SET", "y", "world"))
 	resp := cDoConn(t, client1, "EXEC")
-	results := unwrapArray(t, resp)
-	if len(results) != 1 { t.Fatalf("len mismatch: got %d want 1", len(results)) }
-	assertErrorPrefix(t, results[0], "OOM")
+	// go-redis lifts a one-element EXEC array whose only reply is an error into
+	// the command's own error, so accept both shapes: the fault is still the
+	// OOM rejection of the queued write.
+	if resp.err != nil {
+		assertErrorPrefix(t, resp, "OOM")
+	} else {
+		results := unwrapArray(t, resp)
+		if len(results) != 1 {
+			t.Fatalf("len mismatch: got %d want 1", len(results))
+		}
+		assertErrorPrefix(t, results[0], "OOM")
+	}
 	assertOK(t, cDoConn(t, client1, "CONFIG", "SET", "maxmemory", "0"))
 }
 
@@ -427,7 +491,9 @@ func Test_TCL_tcl_exec_with_only_read_commands_should_not_be_rejected_when_oom(t
 	assertQueued(t, cDoConn(t, client1, "GET", "x"))
 	resp := cDoConn(t, client1, "EXEC")
 	results := unwrapArray(t, resp)
-	if len(results) != 1 { t.Fatalf("len mismatch: got %d want 1", len(results)) }
+	if len(results) != 1 {
+		t.Fatalf("len mismatch: got %d want 1", len(results))
+	}
 	assertBulkEq(t, results[0], "hello")
 	assertOK(t, cDoConn(t, client1, "CONFIG", "SET", "maxmemory", "0"))
 }
@@ -448,8 +514,12 @@ func Test_TCL_tcl_watch_stale_keys_should_not_fail_exec(t *testing.T) {
 	assertQueued(t, cDoConn(t, client1, "PING"))
 	resp := cDoConn(t, client1, "EXEC")
 	results := unwrapArray(t, resp)
-	if len(results) != 1 { t.Fatalf("len mismatch: got %d want 1", len(results)) }
-	if results[0].val != "PONG" { t.Fatalf("match failed: got %v", results[0].val) }
+	if len(results) != 1 {
+		t.Fatalf("len mismatch: got %d want 1", len(results))
+	}
+	if results[0].val != "PONG" {
+		t.Fatalf("match failed: got %v", results[0].val)
+	}
 	assertOK(t, cDoConn(t, client1, "DEBUG", "SET-ACTIVE-EXPIRE", "1"))
 }
 
@@ -471,8 +541,12 @@ func Test_TCL_tcl_delete_watched_stale_keys_should_not_fail_exec(t *testing.T) {
 	assertQueued(t, cDoConn(t, client1, "PING"))
 	resp := cDoConn(t, client1, "EXEC")
 	results := unwrapArray(t, resp)
-	if len(results) != 1 { t.Fatalf("len mismatch: got %d want 1", len(results)) }
-	if results[0].val != "PONG" { t.Fatalf("match failed: got %v", results[0].val) }
+	if len(results) != 1 {
+		t.Fatalf("len mismatch: got %d want 1", len(results))
+	}
+	if results[0].val != "PONG" {
+		t.Fatalf("match failed: got %v", results[0].val)
+	}
 	assertOK(t, cDoConn(t, client1, "DEBUG", "SET-ACTIVE-EXPIRE", "1"))
 }
 
@@ -493,8 +567,12 @@ func Test_TCL_tcl_flushdb_while_watching_stale_keys_should_not_fail_exec(t *test
 	assertQueued(t, cDoConn(t, client1, "PING"))
 	resp := cDoConn(t, client1, "EXEC")
 	results := unwrapArray(t, resp)
-	if len(results) != 1 { t.Fatalf("len mismatch: got %d want 1", len(results)) }
-	if results[0].val != "PONG" { t.Fatalf("match failed: got %v", results[0].val) }
+	if len(results) != 1 {
+		t.Fatalf("len mismatch: got %d want 1", len(results))
+	}
+	if results[0].val != "PONG" {
+		t.Fatalf("match failed: got %v", results[0].val)
+	}
 	assertOK(t, cDoConn(t, client1, "DEBUG", "SET-ACTIVE-EXPIRE", "1"))
 }
 
@@ -523,7 +601,9 @@ func Test_TCL_tcl_just_exec_and_script_timeout(t *testing.T) {
 	assertQueued(t, cDoConn(t, client1, "GET", "{k}x"))
 	r := cDoConn(t, client1, "EXEC")
 	items := unwrapArray(t, r)
-	if len(items) != 2 { t.Fatalf("len mismatch: got %d want 2", len(items)) }
+	if len(items) != 2 {
+		t.Fatalf("len mismatch: got %d want 2", len(items))
+	}
 	assertOK(t, items[0])
 	assertBulkEq(t, items[1], "hello")
 	// PORT-TODO: }
@@ -542,7 +622,9 @@ func Test_TCL_tcl_multi_with_config_error(t *testing.T) {
 	assertQueued(t, cDoConn(t, client1, "SET", "x", "hello"))
 	resp := cDoConn(t, client1, "EXEC")
 	results := unwrapArray(t, resp)
-	if len(results) != 2 { t.Fatalf("len mismatch: got %d want 2", len(results)) }
+	if len(results) != 2 {
+		t.Fatalf("len mismatch: got %d want 2", len(results))
+	}
 	assertErrorPrefix(t, results[0], "ERR")
 	assertOK(t, results[1])
 	cDoConn(t, client1, "GET", "x")

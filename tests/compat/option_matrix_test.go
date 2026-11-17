@@ -118,14 +118,18 @@ func TestPubSubIntrospection(t *testing.T) {
 		t.Fatalf("PUBSUB CHANNELS pattern: got %v", chans)
 	}
 
-	// NOTE: after the last channel is removed, redcon's detached-connection
-	// loop may close the socket instead of answering the unsubscribe frame
-	// (it differs from Redis, which keeps the connection open). Accept both.
-	uv, _, err := c.ReadValue()
-	if err == nil {
-		if r := uv.Array(); len(r) != 3 || r[0].String() != "unsubscribe" || r[2].Integer() != 0 {
-			t.Fatalf("unsubscribe push: got %v", r)
-		}
+	// Unsubscribing must answer with a frame whose count is now zero, and the
+	// registry must drop the channel immediately: a hidden leak here is exactly
+	// what makes PUBSUB CHANNELS/NUMSUB drift away from reality.
+	r := do(t, c, "UNSUBSCRIBE", "news").Array()
+	if len(r) != 3 || r[0].String() != "unsubscribe" || r[2].Integer() != 0 {
+		t.Fatalf("unsubscribe push: got %v", r)
+	}
+	if n := do(t, c2, "PUBSUB", "NUMSUB", "news").Array(); n[1].Integer() != 0 {
+		t.Fatalf("PUBSUB NUMSUB after unsubscribe: got %v", n)
+	}
+	if chans := do(t, c2, "PUBSUB", "CHANNELS").Array(); len(chans) != 0 {
+		t.Fatalf("PUBSUB CHANNELS after unsubscribe: got %v", chans)
 	}
 }
 

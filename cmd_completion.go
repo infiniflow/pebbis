@@ -81,13 +81,26 @@ func lmoveCmd(c *Ctx, args [][]byte, blocking bool) error {
 				expireAt = e.Expiry()
 			}
 		}
+		// BLMOVE parks between attempts, so it takes the write gate around the
+		// move itself; plain LMOVE already holds it from dispatch and must not
+		// re-enter it.
+		release := func() {}
+		if blocking {
+			release = c.writeSlot()
+		}
 		v, ok, err := c.Store.listPopSide(c.DB, src, srcLeft)
+		release()
 		if err != nil {
 			return err
 		}
 		if ok {
-			if _, err := c.Store.listPush(c.DB, dst, []string{v}, dstLeft, false); err != nil {
-				return err
+			if blocking {
+				release = c.writeSlot()
+			}
+			_, perr := c.Store.listPush(c.DB, dst, []string{v}, dstLeft, false)
+			release()
+			if perr != nil {
+				return perr
 			}
 			if sameKey && expireAt != 0 {
 				c.Store.dict.SetExpiry(c.DB, dst, expireAt)
@@ -303,7 +316,12 @@ func lmpopCmd(c *Ctx, args [][]byte, blocking bool) error {
 			if len(a.list) == 0 {
 				continue
 			}
+			release := func() {}
+			if blocking {
+				release = c.writeSlot()
+			}
 			out, err := c.Store.listPop(c.DB, k, count, left)
+			release()
 			if err != nil {
 				return err
 			}

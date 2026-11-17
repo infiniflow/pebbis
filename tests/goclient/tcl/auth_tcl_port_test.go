@@ -16,22 +16,3 @@ func Test_TCL_tcl_auth_fails_if_no_password_configured(t *testing.T) {
 	_ = resp
 	assertErrorPrefix(t, resp, "ERR")
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

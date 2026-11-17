@@ -28,16 +28,28 @@ type Evictor struct {
 	// deleteFn removes the persisted copy. It is only invoked in
 	// config.EvictCache mode; EvictPersist leaves the data on disk.
 	deleteFn func(db uint16, key string) error
+	// usage reports the bytes charged against MaxMemory. The store supplies a
+	// function that also counts the block cache and memtables, so eviction
+	// starts before the process footprint crosses the budget rather than after.
+	// A nil usage falls back to the index size alone.
+	usage func() uint64
+	// paused, when set and true, suspends eviction. The store uses it while a
+	// transaction stage is open: deleting keys there would either deadlock on
+	// the write gate or drop data the transaction is about to write.
+	paused func() bool
 
 	evicted atomic.Int64
 }
 
-// NewEvictor builds an evictor over dict.
-func NewEvictor(cfg *atomic.Pointer[config.Config], dict *Dict, deleteFn func(db uint16, key string) error) *Evictor {
+// NewEvictor builds an evictor over dict. usage and paused may be nil.
+func NewEvictor(cfg *atomic.Pointer[config.Config], dict *Dict, deleteFn func(db uint16, key string) error, usage func() uint64, paused func() bool) *Evictor {
 	if deleteFn == nil {
 		deleteFn = func(uint16, string) error { return nil }
 	}
-	return &Evictor{cfg: cfg, dict: dict, deleteFn: deleteFn}
+	if usage == nil {
+		usage = func() uint64 { return uint64(dict.Used()) }
+	}
+	return &Evictor{cfg: cfg, dict: dict, deleteFn: deleteFn, usage: usage, paused: paused}
 }
 
 // evictSnapshot is a consistent read of the eviction knobs. It is taken from a
@@ -78,8 +90,11 @@ func (ev *Evictor) MaybeEvict() {
 	if !snap.enabled {
 		return
 	}
-	target := int64(float64(snap.maxMemory) * snap.targetRatio)
-	if ev.dict.Used() <= target {
+	if ev.paused != nil && ev.paused() {
+		return
+	}
+	target := uint64(float64(snap.maxMemory) * snap.targetRatio)
+	if ev.usage() <= target {
 		return
 	}
 
@@ -87,7 +102,10 @@ func (ev *Evictor) MaybeEvict() {
 	const roundLimit = 64
 	deadline := time.Now().Add(time.Millisecond)
 	for range roundLimit {
-		if ev.dict.Used() <= target || time.Now().After(deadline) {
+		// The engine's own memory (block cache, memtables) cannot be reclaimed
+		// by dropping keys, so stop once the index is empty: otherwise a budget
+		// smaller than the engine's floor would spin here on every write.
+		if ev.usage() <= target || ev.dict.Used() == 0 || time.Now().After(deadline) {
 			return
 		}
 		if !ev.evictOne(snap) {

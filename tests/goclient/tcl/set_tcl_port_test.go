@@ -8,12 +8,6 @@ import (
 	"testing"
 )
 
-
-
-
-
-
-
 func Test_TCL_tcl_smismember_smembers_scard_against_non_set(t *testing.T) {
 	addr := startServer(t)
 	_ = addr
@@ -29,8 +23,6 @@ func Test_TCL_tcl_smismember_smembers_scard_against_non_set(t *testing.T) {
 	r = cDo(t, client1, "SCARD", "mylist")
 	assertErrorPrefix(t, r, "WRONGTYPE")
 }
-
-
 
 func Test_TCL_tcl_sadd_against_non_set(t *testing.T) {
 	addr := startServer(t)
@@ -55,14 +47,6 @@ func Test_TCL_tcl_sadd_an_integer_larger_than_64_bits(t *testing.T) {
 	_ = r
 	assertIntegerEq(t, r, 1)
 }
-
-
-
-
-
-
-
-
 
 func Test_TCL_tcl_srem_variadic_version_with_more_args_needed_to_destroy_the_key(t *testing.T) {
 	addr := startServer(t)
@@ -125,14 +109,6 @@ func Test_TCL_tcl_sintercard_against_non_existing_key(t *testing.T) {
 	assertIntegerEq(t, r, 0)
 }
 
-
-
-
-
-
-
-
-
 func Test_TCL_tcl_sdiff_with_first_set_empty(t *testing.T) {
 	addr := startServer(t)
 	_ = addr
@@ -185,10 +161,6 @@ func Test_TCL_tcl_sdiff_against_non_set(t *testing.T) {
 	assertErrorPrefix(t, r, "WRONGTYPE")
 }
 
-
-
-
-
 func Test_TCL_tcl_sinter_should_handle_non_existing_key_as_empty(t *testing.T) {
 	addr := startServer(t)
 	_ = addr
@@ -219,12 +191,6 @@ func Test_TCL_tcl_sinter_against_non_set(t *testing.T) {
 	r = cDo(t, client1, "SINTER", "noset{t}", "key1{t}")
 	assertErrorPrefix(t, r, "WRONGTYPE")
 }
-
-
-
-
-
-
 
 func Test_TCL_tcl_spop_using_integers_knuth_and_floyd(t *testing.T) {
 	addr := startServer(t)
@@ -314,8 +280,6 @@ func Test_TCL_tcl_srandmember_count_overflow(t *testing.T) {
 	assertErrorPrefix(t, r, "ERR")
 }
 
-
-
 func Test_TCL_tcl_smove_non_existing_element(t *testing.T) {
 	addr := startServer(t)
 	_ = addr
@@ -343,8 +307,6 @@ func Test_TCL_tcl_smove_non_existing_src_set(t *testing.T) {
 	assertIntegerEq(t, r, 0)
 }
 
-
-
 func Test_TCL_tcl_smove_wrong_src_key_type(t *testing.T) {
 	addr := startServer(t)
 	_ = addr
@@ -357,12 +319,6 @@ func Test_TCL_tcl_smove_wrong_src_key_type(t *testing.T) {
 	_ = r
 	assertErrorPrefix(t, r, "WRONGTYPE")
 }
-
-
-
-
-
-
 
 func Test_TCL_tcl_sinterstore_against_non_existing_keys_should_delete_dstkey(t *testing.T) {
 	addr := startServer(t)
@@ -405,7 +361,3 @@ func Test_TCL_tcl_sunion_against_non_set(t *testing.T) {
 	r = cDo(t, client1, "SUNION", "noset{t}", "key1{t}")
 	assertErrorPrefix(t, r, "WRONGTYPE")
 }
-
-
-
-
