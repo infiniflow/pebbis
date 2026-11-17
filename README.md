@@ -18,15 +18,36 @@ It can be used two ways:
 
 ## Quick start
 
-Embedded:
+Embedded (library API):
 
 ```go
-store, err := pebbis.Open(pebbis.WithDir("/path/to/data"))
+cfg := pebbis.DefaultOptions()
+cfg.Dir = "/path/to/data"
+store, err := pebbis.Open(cfg)
 if err != nil {
     return err
 }
 defer store.Close()
 ```
+
+Embedded with a RESP endpoint — existing Redis clients switch by changing only the
+connection string, and the store still lives inside your process:
+
+```go
+emb, err := pebbis.OpenEmbedded(pebbis.EmbedOptions{Dir: "/path/to/data"})
+if err != nil {
+    return err
+}
+defer emb.Close()
+// Clients connect to emb.Addr(), a unix socket with mode 0600.
+// Hot paths in this process can also call emb.Store() and skip the protocol.
+```
+
+`OpenEmbedded` spawns no child process: the listener is a goroutine over the same
+`Store`, so a host restart restarts the store (Pebble replays its WAL) and there is
+no orphan process to reap. The data directory is owned exclusively by one process.
+Because clients still speak RESP, a command pays for parsing and a socket round trip —
+embedded mode saves a separate deployment, not the protocol.
 
 Server:
 
