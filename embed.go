@@ -28,7 +28,10 @@ import (
 type Embedded struct {
 	store *Store
 	srv   *Server
-	sock  string
+	// addr is the stale-socket path for a unix listener and the resolved
+	// "host:port" for a TCP one; network says which.
+	addr    string
+	network string
 
 	closeOnce sync.Once
 	closeErr  error
@@ -45,6 +48,16 @@ type EmbedOptions struct {
 	// per directory and stays well under the platform's sockaddr_un limit. An
 	// explicit path must fit that limit too (~100 bytes).
 	Socket string
+	// Network selects the listener kind: "" or "unix" (the default) serves a
+	// unix socket, "tcp" serves a loopback TCP address. TCP exists for hosts
+	// where a unix socket is awkward: Windows cannot chmod a socket file and
+	// has a much shorter sockaddr_un budget, so an embedded store there has to
+	// listen on TCP. Socket is ignored when Network is "tcp".
+	Network string
+	// Addr overrides the listen address for Network "tcp". Default
+	// "127.0.0.1:0", i.e. an ephemeral loopback port; read the assigned
+	// address back from Embedded.Addr.
+	Addr string
 	// Config overrides the store configuration. Default: DefaultOptions() with
 	// Dir set. It is copied, so the caller's value is not mutated.
 	Config *config.Config
@@ -80,13 +93,24 @@ func OpenEmbedded(opts EmbedOptions) (*Embedded, error) {
 		return nil, fmt.Errorf("Pebbis: resolve data dir: %w", err)
 	}
 
-	sock := opts.Socket
-	if sock == "" {
-		sock = defaultSocketPath(dir)
+	network := opts.Network
+	if network == "" {
+		network = "unix"
 	}
-	if len(sock) >= maxUnixSocketPath {
-		return nil, fmt.Errorf("Pebbis: unix socket path is %d bytes, the limit is %d: %s "+
-			"(set EmbedOptions.Socket to a shorter path)", len(sock), maxUnixSocketPath-1, sock)
+	if network != "unix" && network != "tcp" {
+		return nil, fmt.Errorf("Pebbis: EmbedOptions.Network must be \"unix\" or \"tcp\", got %q", opts.Network)
+	}
+
+	var sock string
+	if network == "unix" {
+		sock = opts.Socket
+		if sock == "" {
+			sock = defaultSocketPath(dir)
+		}
+		if len(sock) >= maxUnixSocketPath {
+			return nil, fmt.Errorf("Pebbis: unix socket path is %d bytes, the limit is %d: %s "+
+				"(set EmbedOptions.Socket to a shorter path)", len(sock), maxUnixSocketPath-1, sock)
+		}
 	}
 
 	cfg := opts.Config
@@ -105,25 +129,47 @@ func OpenEmbedded(opts EmbedOptions) (*Embedded, error) {
 		return nil, err
 	}
 
-	if err := clearStaleSocket(sock); err != nil {
-		_ = store.Close()
-		return nil, err
-	}
-	ln, err := net.Listen("unix", sock)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("Pebbis: listen on %s: %w", sock, err)
-	}
-	// The socket is a full protocol endpoint without authentication, so keep it
-	// readable by the owning user only.
-	if err := os.Chmod(sock, 0o600); err != nil {
-		_ = ln.Close()
-		_ = store.Close()
-		return nil, fmt.Errorf("Pebbis: chmod socket: %w", err)
+	var ln net.Listener
+	if network == "unix" {
+		if err := clearStaleSocket(sock); err != nil {
+			_ = store.Close()
+			return nil, err
+		}
+		ln, err = net.Listen("unix", sock)
+		if err != nil {
+			_ = store.Close()
+			return nil, fmt.Errorf("Pebbis: listen on %s: %w", sock, err)
+		}
+		// The socket is a full protocol endpoint without authentication, so keep
+		// it readable by the owning user only.
+		if err := os.Chmod(sock, 0o600); err != nil {
+			_ = ln.Close()
+			_ = store.Close()
+			return nil, fmt.Errorf("Pebbis: chmod socket: %w", err)
+		}
+	} else {
+		// Loopback only: the embedded store has no authentication beyond
+		// requirepass, so it must never be reachable from another host.
+		addr := opts.Addr
+		if addr == "" {
+			addr = "127.0.0.1:0"
+		}
+		if !isLoopbackAddr(addr) {
+			_ = store.Close()
+			return nil, fmt.Errorf("Pebbis: EmbedOptions.Addr must be a loopback address, got %q", addr)
+		}
+		ln, err = net.Listen("tcp", addr)
+		if err != nil {
+			_ = store.Close()
+			return nil, fmt.Errorf("Pebbis: listen on %s: %w", addr, err)
+		}
 	}
 
+	if network == "tcp" {
+		sock = ln.Addr().String()
+	}
 	srv := NewServer(store, ServerOptions{
-		Network:    "unix",
+		Network:    network,
 		Addr:       sock,
 		MaxClients: opts.MaxClients,
 	})
@@ -136,7 +182,26 @@ func OpenEmbedded(opts EmbedOptions) (*Embedded, error) {
 		}
 	}()
 
-	return &Embedded{store: store, srv: srv, sock: sock}, nil
+	return &Embedded{store: store, srv: srv, addr: sock, network: network}, nil
+}
+
+// isLoopbackAddr reports whether a "host:port" listen address resolves to a
+// loopback interface. "localhost" and the wildcard host are rejected: the first
+// can resolve to a non-loopback address on some hosts, and the second would
+// publish an unauthenticated endpoint to the network.
+func isLoopbackAddr(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return false
+	}
+	if host == "" {
+		return false
+	}
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // clearStaleSocket removes the leftover socket file of a crashed process, but
@@ -162,8 +227,14 @@ func clearStaleSocket(sock string) error {
 	return nil
 }
 
-// Addr is the unix socket path clients connect to.
-func (e *Embedded) Addr() string { return e.sock }
+// Addr is what clients connect to: the unix socket path for a "unix" listener,
+// or the resolved "host:port" (with the ephemeral port filled in) for a "tcp"
+// one.
+func (e *Embedded) Addr() string { return e.addr }
+
+// Network is the listener kind, "unix" or "tcp". Clients need it to pick the
+// right dial network.
+func (e *Embedded) Network() string { return e.network }
 
 // Store exposes the underlying store, so hot paths can call it directly and
 // skip the protocol entirely.
@@ -179,7 +250,9 @@ func (e *Embedded) Close() error {
 			_ = e.srv.Close()
 		}
 		e.closeErr = e.store.Close()
-		_ = os.Remove(e.sock)
+		if e.network == "unix" {
+			_ = os.Remove(e.addr)
+		}
 	})
 	return e.closeErr
 }

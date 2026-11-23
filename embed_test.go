@@ -169,3 +169,73 @@ func TestOpenEmbeddedRejectsNonSocketPath(t *testing.T) {
 		t.Fatalf("file was removed: %v", statErr)
 	}
 }
+// TestOpenEmbeddedTCPServesRESP covers the cross-platform listener: platforms
+// where a unix socket is awkward (Windows cannot chmod one) get the same
+// endpoint over loopback TCP, and Addr reports the resolved ephemeral port.
+func TestOpenEmbeddedTCPServesRESP(t *testing.T) {
+	dir := t.TempDir()
+	e, err := OpenEmbedded(EmbedOptions{Dir: dir, Network: "tcp"})
+	if err != nil {
+		t.Fatalf("open embedded: %v", err)
+	}
+	defer func() { _ = e.Close() }()
+
+	if e.Network() != "tcp" {
+		t.Fatalf("network = %q", e.Network())
+	}
+	host, port, err := net.SplitHostPort(e.Addr())
+	if err != nil {
+		t.Fatalf("Addr = %q: %v", e.Addr(), err)
+	}
+	if host != "127.0.0.1" || port == "0" {
+		t.Fatalf("Addr = %q, want a resolved loopback port", e.Addr())
+	}
+
+	nc, err := net.DialTimeout("tcp", e.Addr(), 2*time.Second)
+	if err != nil {
+		t.Fatalf("dial %s: %v", e.Addr(), err)
+	}
+	t.Cleanup(func() { _ = nc.Close() })
+	c := resp.NewConn(nc)
+
+	if v := doCmd(t, c, "SET", "k", "v"); v.String() != "OK" {
+		t.Fatalf("SET = %v", v)
+	}
+	if v := doCmd(t, c, "GET", "k"); v.String() != "v" {
+		t.Fatalf("GET = %v", v)
+	}
+	if v := doCmd(t, c, "SELECT", "1"); v.String() != "OK" {
+		t.Fatalf("SELECT = %v", v)
+	}
+
+	// Data written over TCP must survive a reopen on the same directory, and the
+	// closed listener must not leave anything behind.
+	if err := e.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	e2, err := OpenEmbedded(EmbedOptions{Dir: dir, Network: "tcp"})
+	if err != nil {
+		t.Fatalf("reopen embedded: %v", err)
+	}
+	defer func() { _ = e2.Close() }()
+	nc2, err := net.DialTimeout("tcp", e2.Addr(), 2*time.Second)
+	if err != nil {
+		t.Fatalf("dial %s: %v", e2.Addr(), err)
+	}
+	t.Cleanup(func() { _ = nc2.Close() })
+	c2 := resp.NewConn(nc2)
+	if v := doCmd(t, c2, "GET", "k"); v.String() != "v" {
+		t.Fatalf("GET after reopen = %v", v)
+	}
+}
+
+// TestOpenEmbeddedRejectsNonLoopbackAddr keeps the unauthenticated endpoint off
+// the network.
+func TestOpenEmbeddedRejectsNonLoopbackAddr(t *testing.T) {
+	for _, addr := range []string{"0.0.0.0:0", ":0", "8.8.8.8:6379"} {
+		if _, err := OpenEmbedded(EmbedOptions{Dir: t.TempDir(), Network: "tcp", Addr: addr}); err == nil ||
+			!strings.Contains(err.Error(), "loopback") {
+			t.Fatalf("Addr %q: err = %v, want a loopback rejection", addr, err)
+		}
+	}
+}
