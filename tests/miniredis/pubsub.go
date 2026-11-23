@@ -5,7 +5,7 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/pebbis/pebbis/tests/miniredis/server"
+	"github.com/infiniflow/pebbis/tests/miniredis/server"
 )
 
 // PubsubMessage is what gets broadcasted over pubsub channels.

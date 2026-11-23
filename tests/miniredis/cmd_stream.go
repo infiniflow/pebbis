@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pebbis/pebbis/tests/miniredis/server"
+	"github.com/infiniflow/pebbis/tests/miniredis/server"
 )
 
 // commandsStream handles all stream operations.

@@ -4,7 +4,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pebbis/pebbis/config"
+	"github.com/infiniflow/pebbis/config"
 )
 
 // candidate is one sampled eviction victim.

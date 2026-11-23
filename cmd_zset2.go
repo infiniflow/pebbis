@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pebbis/pebbis/config"
-	"github.com/pebbis/pebbis/storage"
+	"github.com/infiniflow/pebbis/config"
+	"github.com/infiniflow/pebbis/storage"
 )
 
 // Sorted-set completion: lexicographic ranges, set operations, ZRANGESTORE,

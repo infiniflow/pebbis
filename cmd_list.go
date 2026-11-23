@@ -3,8 +3,8 @@ package pebbis
 import (
 	"strings"
 
-	"github.com/pebbis/pebbis/config"
-	"github.com/pebbis/pebbis/storage"
+	"github.com/infiniflow/pebbis/config"
+	"github.com/infiniflow/pebbis/storage"
 )
 
 // List commands.

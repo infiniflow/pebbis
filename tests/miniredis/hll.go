@@ -1,7 +1,7 @@
 package miniredis
 
 import (
-	"github.com/pebbis/pebbis/tests/miniredis/hyperloglog"
+	"github.com/infiniflow/pebbis/tests/miniredis/hyperloglog"
 )
 
 type hll struct {

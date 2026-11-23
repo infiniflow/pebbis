@@ -21,9 +21,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pebbis/pebbis/config"
-	"github.com/pebbis/pebbis/memory"
-	"github.com/pebbis/pebbis/storage"
+	"github.com/infiniflow/pebbis/config"
+	"github.com/infiniflow/pebbis/memory"
+	"github.com/infiniflow/pebbis/storage"
 )
 
 // Options configures a Store. It aliases config.Config so callers can use

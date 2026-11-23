@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pebbis/pebbis/tests/miniredis/server"
-	"github.com/pebbis/pebbis/tests/miniredis/size"
+	"github.com/infiniflow/pebbis/tests/miniredis/server"
+	"github.com/infiniflow/pebbis/tests/miniredis/size"
 )
 
 func commandsServer(m *Miniredis) {

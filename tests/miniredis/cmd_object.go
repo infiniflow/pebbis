@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/pebbis/pebbis/tests/miniredis/server"
+	"github.com/infiniflow/pebbis/tests/miniredis/server"
 )
 
 // commandsObject handles all object operations.

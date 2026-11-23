@@ -11,8 +11,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/pebbis/pebbis/tests/miniredis"
-	"github.com/pebbis/pebbis/tests/miniredis/proto"
+	"github.com/infiniflow/pebbis/tests/miniredis"
+	"github.com/infiniflow/pebbis/tests/miniredis/proto"
 )
 
 func skip(t testing.TB) {

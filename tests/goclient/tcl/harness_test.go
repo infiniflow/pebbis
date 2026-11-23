@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pebbis/pebbis"
+	"github.com/infiniflow/pebbis"
 	"github.com/redis/go-redis/v9"
 )
 

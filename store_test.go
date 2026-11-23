@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pebbis/pebbis/config"
+	"github.com/infiniflow/pebbis/config"
 )
 
 func testStore(t *testing.T, mutate func(*config.Config)) *Store {

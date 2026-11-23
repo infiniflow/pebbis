@@ -6,8 +6,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/pebbis/pebbis/config"
-	"github.com/pebbis/pebbis/storage"
+	"github.com/infiniflow/pebbis/config"
+	"github.com/infiniflow/pebbis/storage"
 )
 
 // benchStore opens an engine with group-sync so the numbers measure the data

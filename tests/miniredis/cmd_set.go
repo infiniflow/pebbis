@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pebbis/pebbis/tests/miniredis/server"
+	"github.com/infiniflow/pebbis/tests/miniredis/server"
 )
 
 // commandsSet handles all set value operations.

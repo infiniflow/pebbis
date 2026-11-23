@@ -3,7 +3,7 @@
 package miniredis
 
 import (
-	"github.com/pebbis/pebbis/tests/miniredis/server"
+	"github.com/infiniflow/pebbis/tests/miniredis/server"
 )
 
 // commandsTransaction handles MULTI &c.

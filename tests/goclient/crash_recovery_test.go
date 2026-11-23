@@ -19,7 +19,7 @@ import (
 func buildBinary(t *testing.T) string {
 	t.Helper()
 	bin := t.TempDir() + "/pebbisd"
-	cmd := exec.Command("go", "build", "-o", bin, "github.com/pebbis/pebbis/cmd/pebbisd")
+	cmd := exec.Command("go", "build", "-o", bin, "github.com/infiniflow/pebbis/cmd/pebbisd")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("build pebbisd: %v\n%s", err, out)
 	}

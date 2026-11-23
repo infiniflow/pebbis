@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pebbis/pebbis"
-	"github.com/pebbis/pebbis/config"
+	"github.com/infiniflow/pebbis"
+	"github.com/infiniflow/pebbis/config"
 	"github.com/tidwall/resp"
 )
 

@@ -4,8 +4,8 @@ import (
 	"math"
 	"time"
 
-	"github.com/pebbis/pebbis/config"
-	"github.com/pebbis/pebbis/storage"
+	"github.com/infiniflow/pebbis/config"
+	"github.com/infiniflow/pebbis/storage"
 )
 
 // This file holds the data-path primitives shared by the command handlers and

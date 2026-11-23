@@ -6,7 +6,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/pebbis/pebbis/config"
+	"github.com/infiniflow/pebbis/config"
 )
 
 var dictSeed = maphash.MakeSeed()

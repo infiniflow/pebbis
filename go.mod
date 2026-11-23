@@ -1,4 +1,4 @@
-module github.com/pebbis/pebbis
+module github.com/infiniflow/pebbis
 
 go 1.26.0
 

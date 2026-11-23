@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pebbis/pebbis/glob"
+	"github.com/infiniflow/pebbis/glob"
 	"github.com/tidwall/redcon"
 )
 

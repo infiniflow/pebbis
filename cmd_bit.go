@@ -3,7 +3,7 @@ package pebbis
 import (
 	"strconv"
 
-	"github.com/pebbis/pebbis/config"
+	"github.com/infiniflow/pebbis/config"
 )
 
 // Bit commands.

@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pebbis/pebbis/config"
+	"github.com/infiniflow/pebbis/config"
 )
 
 // Embedded is an in-process RESP endpoint: a Store plus a listener goroutine in

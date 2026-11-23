@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pebbis/pebbis/config"
-	"github.com/pebbis/pebbis/glob"
-	"github.com/pebbis/pebbis/storage"
+	"github.com/infiniflow/pebbis/config"
+	"github.com/infiniflow/pebbis/glob"
+	"github.com/infiniflow/pebbis/storage"
 )
 
 // Generic (key-space) commands.

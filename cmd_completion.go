@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pebbis/pebbis/config"
-	"github.com/pebbis/pebbis/memory"
-	"github.com/pebbis/pebbis/storage"
+	"github.com/infiniflow/pebbis/config"
+	"github.com/infiniflow/pebbis/memory"
+	"github.com/infiniflow/pebbis/storage"
 )
 
 // M1 completion for list, generic and string commands.

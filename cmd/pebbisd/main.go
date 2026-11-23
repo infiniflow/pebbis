@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"syscall"
 
-	"github.com/pebbis/pebbis"
-	"github.com/pebbis/pebbis/config"
+	"github.com/infiniflow/pebbis"
+	"github.com/infiniflow/pebbis/config"
 )
 
 func main() {
