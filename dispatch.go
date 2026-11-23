@@ -236,6 +236,11 @@ var commands = map[string]command{
 	"CLIENT":   {cmdClient, -2, false},
 	"OBJECT":   {cmdObject, -3, false},
 	"SHUTDOWN": {cmdShutdown, -1, false},
+
+	// Scripting.
+	"EVAL":    {cmdEval, -3, true},
+	"EVALSHA": {cmdEvalSha, -3, true},
+	"SCRIPT":  {cmdScript, -2, false},
 }
 
 // commandCount and commandNames are precomputed in init.
